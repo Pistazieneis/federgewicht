@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8">
+<title>Federgewicht</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="fonts.css">
+<style>
+/* Layout: ein Kopfbereich mit Ressourcen, darunter das Gewichts-Panel, dann Tabs (Pakete / Sammlung / Prestige).
+   Bewusst nur ein dunkles Pixel-Theme (Arcade-Look), daher kein Light-Mode. */
+:root{
+  --bg:#14121f; --panel:#1f1b33; --panel2:#2a2545; --line:#0a0812; --hi:#4a4272;
+  --fg:#e8e4ff; --dim:#9a93c4; --gold:#ffd23f; --ess:#c77dff; --good:#5ee08a; --bad:#ff5a6e;
+  --r0:#9aa3b8; --r1:#5ee08a; --r2:#4aa8ff; --r3:#c77dff; --r4:#ffa23a;
+  --head:'Press Start 2P',monospace; --body:'VT323',monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:22px;line-height:1.15;
+  padding-block:16px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  background-image:linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);
+  background-size:8px 8px}
+img,canvas{image-rendering:pixelated}
+#app{max-width:920px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+h1,h2,.head{font-family:var(--head);font-weight:400;margin:0;line-height:1.4}
+h1{font-size:18px;color:var(--gold);text-shadow:3px 3px 0 var(--line)}
+h2{font-size:11px;color:var(--dim);letter-spacing:1px}
+button{font-family:var(--head);font-size:10px;color:var(--fg);cursor:pointer}
+button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+
+/* Pixel-Rahmen: dicker dunkler Rand + helle/dunkle Innenkante */
+.px{background:var(--panel);border:4px solid var(--line);
+  box-shadow:inset 4px 4px 0 rgba(255,255,255,.07),inset -4px -4px 0 rgba(0,0,0,.35)}
+.panel{padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+
+/* Kopf */
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+.res{display:flex;gap:10px;flex-wrap:wrap}
+.chip{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--panel);border:4px solid var(--line);box-shadow:inset 3px 3px 0 rgba(255,255,255,.07),inset -3px -3px 0 rgba(0,0,0,.35)}
+.chip img{width:24px;height:24px}
+.chip .v{font-family:var(--head);font-size:12px}
+.chip small{display:block;color:var(--dim);font-size:18px}
+.gold{color:var(--gold)} .essc{color:var(--ess)}
+
+/* Gewichts-Panel */
+#weight .top{display:flex;gap:14px;align-items:center}
+#weight .top img{width:64px;height:64px;flex:none}
+.formula{font-size:22px;color:var(--fg)}
+.formula b{color:var(--gold);font-weight:400}
+.bar{height:20px;background:var(--line);border:4px solid var(--line);position:relative}
+.bar i{display:block;height:100%;background:var(--bad);transition:width .2s steps(6)}
+.bar span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--head);font-size:8px;text-shadow:2px 2px 0 var(--line)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.stat{background:var(--panel2);padding:6px 8px;border:3px solid var(--line)}
+.stat small{display:block;color:var(--dim);font-size:18px}
+.stat b{font-family:var(--head);font-weight:400;font-size:11px}
+
+/* Tabs */
+nav{display:flex;gap:6px;flex-wrap:wrap}
+nav button{flex:1 1 120px;padding:12px 8px;background:var(--panel2);border:4px solid var(--line);box-shadow:inset 3px 3px 0 rgba(255,255,255,.07),inset -3px -3px 0 rgba(0,0,0,.35)}
+nav button[aria-selected=true]{background:var(--hi);color:var(--gold)}
+.tab[hidden]{display:none}
+
+/* Paket-Bereich */
+.packrow{display:flex;gap:18px;flex-wrap:wrap;align-items:center}
+#packbtn{display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 18px;background:var(--panel2);border:4px solid var(--line);box-shadow:inset 3px 3px 0 rgba(255,255,255,.1),inset -3px -3px 0 rgba(0,0,0,.4);min-width:210px}
+#packbtn img{width:90px;height:90px;transition:transform .1s steps(2)}
+#packbtn:hover:not(:disabled) img{transform:translateY(-4px)}
+#packbtn:active:not(:disabled){transform:translate(2px,2px)}
+#packbtn:disabled{opacity:.55;cursor:not-allowed}
+#packbtn .cost{font-size:20px;font-family:var(--body);color:var(--gold)}
+.info{flex:1 1 260px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.probs{display:flex;gap:4px;flex-wrap:wrap}
+.prob{flex:1 1 70px;padding:4px 6px;border:3px solid var(--line);background:var(--panel2);text-align:center;font-size:18px}
+.prob b{display:block;font-family:var(--head);font-weight:400;font-size:9px}
+.reveal{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;min-height:130px}
+.card{border:4px solid var(--line);background:var(--panel2);padding:8px 6px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:3px;
+  box-shadow:inset 0 0 0 3px var(--rc),inset -3px -3px 0 rgba(0,0,0,.3);animation:pop .35s steps(5) both}
+.card img{width:48px;height:48px}
+.card .n{font-family:var(--head);font-size:8px;line-height:1.4}
+.card .e{font-size:19px;color:var(--fg)}
+.card .rn{font-size:17px;color:var(--rc)}
+.r0{--rc:var(--r0)}.r1{--rc:var(--r1)}.r2{--rc:var(--r2)}.r3{--rc:var(--r3)}.r4{--rc:var(--r4)}
+.r4.card,.r3.card{background:linear-gradient(135deg,var(--panel2),#3a2f5c)}
+@keyframes pop{0%{transform:scale(.3) rotate(-8deg);opacity:0}100%{transform:none;opacity:1}}
+.empty{grid-column:1/-1;color:var(--dim);align-self:center;text-align:center}
+
+/* Sammlung */
+.coll{display:flex;flex-direction:column;gap:12px}
+.collrow{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+.collhead{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:baseline}
+.collhead .head{font-size:10px}
+.cell{border:3px solid var(--line);background:var(--panel2);padding:6px 4px;text-align:center;box-shadow:inset 0 -4px 0 var(--rc);min-width:0}
+.cell.zero{opacity:.45}
+.cell img{width:32px;height:32px}
+.cell b{display:block;font-family:var(--head);font-weight:400;font-size:10px}
+.cell small{display:block;color:var(--dim);font-size:17px;overflow-wrap:anywhere}
+
+/* Prestige */
+.pbox{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.pbox img{width:72px;height:72px}
+.btn{padding:12px 14px;background:var(--hi);border:4px solid var(--line);box-shadow:inset 3px 3px 0 rgba(255,255,255,.12),inset -3px -3px 0 rgba(0,0,0,.4)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.ess{background:#5b2f93;color:#fff}
+.btn.warn{background:var(--bad);color:#fff}
+.shop{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:8px}
+.up{display:flex;flex-direction:column;gap:6px;padding:10px;background:var(--panel2);border:4px solid var(--line)}
+.up .t{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.up .t .head{font-size:9px}
+.up .lvl{color:var(--ess);font-family:var(--head);font-size:9px}
+.up p{margin:0;color:var(--dim)}
+.up button{padding:8px;background:var(--hi);border:3px solid var(--line)}
+.up button:disabled{opacity:.45;cursor:not-allowed}
+.up button.can{background:#5b2f93;color:#fff}
+footer{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;color:var(--dim);font-size:18px;align-items:center}
+footer button{background:none;border:3px solid var(--hi);padding:6px 8px;color:var(--dim);font-size:8px}
+#toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--panel2);border:4px solid var(--gold);padding:10px 14px;z-index:20;max-width:90vw;text-align:center}
+@media (max-width:520px){ .collrow{gap:3px} .cell small{font-size:15px} h1{font-size:14px} }
+@media (prefers-reduced-motion:reduce){ .card{animation:none} .bar i{transition:none} }
+</style></head><body>
+
+<div id="app">
+  <header>
+    <h1>FEDERGEWICHT</h1>
+    <div class="res">
+      <div class="chip"><img id="icoCoin" alt=""><div><span class="v gold" id="coins">0</span><small id="ips">0/s</small></div></div>
+      <div class="chip"><img id="icoEss" alt=""><div><span class="v essc" id="essTop">0</span><small>Essenz</small></div></div>
+    </div>
+  </header>
+
+  <!-- Gewichts-Panel: erklärt und zeigt die Basisfunktion, die den Fortschritt bremst -->
+  <section class="px panel" id="weight">
+    <div class="top">
+      <img id="icoWeight" alt="">
+      <div>
+        <h2>DAS GEWICHT</h2>
+        <div class="formula">Einkommen = Basis × Bonus ÷ <b>w</b> &nbsp; mit &nbsp;<b>w = 1 + (E ÷ S)<sup>p</sup></b></div>
+      </div>
+    </div>
+    <div class="bar"><i id="brake" style="width:0"></i><span id="brakeTxt"></span></div>
+    <div class="stats" id="stats"></div>
+  </section>
+
+  <nav role="tablist" id="tabs">
+    <button role="tab" data-tab="packs" aria-selected="true">PAKETE</button>
+    <button role="tab" data-tab="coll" aria-selected="false">SAMMLUNG</button>
+    <button role="tab" data-tab="pres" aria-selected="false">PRESTIGE</button>
+  </nav>
+
+  <!-- Tab: Pakete -->
+  <section class="tab px panel" id="tab-packs">
+    <div class="packrow">
+      <button id="packbtn"><img id="icoPack" alt=""><span class="head" id="packLabel">ÖFFNEN</span><span class="cost" id="packCost"></span></button>
+      <div class="info">
+        <div id="packInfo"></div>
+        <div class="probs" id="probs"></div>
+      </div>
+    </div>
+    <h2>ZULETZT GEZOGEN</h2>
+    <div class="reveal" id="reveal"><div class="empty">Öffne ein Paket. Jedes enthält 5 Karten.</div></div>
+  </section>
+
+  <!-- Tab: Sammlung -->
+  <section class="tab px panel" id="tab-coll" hidden>
+    <div class="coll" id="collection"></div>
+  </section>
+
+  <!-- Tab: Prestige -->
+  <section class="tab px panel" id="tab-pres" hidden>
+    <div class="pbox">
+      <img id="icoEss2" alt="">
+      <div style="flex:1 1 260px;display:flex;flex-direction:column;gap:6px">
+        <h2>PRESTIGE</h2>
+        <div id="presInfo"></div>
+      </div>
+      <button class="btn ess" id="presBtn">PRESTIGE</button>
+    </div>
+    <h2>ESSENZ-SHOP (bleibt für immer)</h2>
+    <div class="shop" id="shop"></div>
+  </section>
+
+  <footer>
+    <span id="foot"></span>
+    <button id="resetBtn">SPIELSTAND LÖSCHEN</button>
+  </footer>
+</div>
+<div id="toast" class="px" hidden></div>
+
+<script>
+"use strict";
+/* =====================================================================
+   FEDERGEWICHT – Spiellogik
+   Kernidee:
+   - Einkommen/s = Basis × Prestige-Bonus ÷ w(E)   mit  w(E) = 1 + (E/S)^p
+     E = alles, was du in diesem Run verdient hast (nicht der Kontostand!).
+     Am Anfang ist S klein und p groß -> das Gewicht erdrückt dich.
+   - Karten (Perks) erhöhen die Basis, vergrößern S, senken p,
+     öffnen Pakete automatisch oder erhöhen die Chance auf seltene Karten.
+   - Prestige setzt den Run zurück, gibt Essenz (Bonus + Shop-Währung).
+   ===================================================================== */
+
+/* ---------- Pixel-Sprites: jede Zeile ist eine Pixelreihe, jeder Buchstabe eine Farbe ---------- */
+const PAL={k:'#14121f',w:'#ffffff',y:'#ffd23f',o:'#e08a1e',r:'#ff5a6e',R:'#b3243c',g:'#5ee08a',G:'#27914f',
+  b:'#4aa8ff',B:'#2160b8',c:'#9be8ff',p:'#c77dff',P:'#7b3fc4',n:'#8a5a3b',s:'#9aa3b8',S:'#5d6580'};
+const SPR={
+  coin:["..kkkk..",".kyyyyk.","kyywwyyk","kyyoyyok","kyyoyyok","kyyyyyok",".kooook.","..kkkk.."],
+  feather:[".....kkk","...kkccb","..kccccB",".kcccbBk","kcccbBk.","kcbBkk..","kBkk....","k......."],
+  balloon:["..kkkk..",".krrrrk.","krwrrrRk","krwrrrRk","krrrrRRk",".krRRRk.","..kkkk..","...kk..."],
+  hourglass:["kkkkkkkk","kcccccck",".kccccw.","..kyyk..","..kyyk..",".kyyyyk.","kyyyyyyk","kkkkkkkk"],
+  clover:[".gg..gg.","gGGggGGg",".gggggg.","...gg...",".gggggg.","gGGggGGg",".gg..gg.","...nn..."],
+  pack:[".kkkkkkkk.","kbcbcbcbck","kbbbbbbbbk","kbbbyybbbk","kbbyyyybbk","kbbbyybbbk","kbbbbbbbbk","kbbbbbbbbk","kbcbcbcbck",".kkkkkkkk."],
+  crystal:["...kk...","..kppk..",".kpwppk.","kppwpppk","kpppppPk",".kpppPk.","..kpPk..","...kk..."],
+  weight:["..kkkk..",".k....k.",".k....k.",".kkkkkk.","kSSSSSSk","kSsSSSSk","kSSSSSSk",".kkkkkk."]
+};
+const spriteCache={};
+function sprite(name,scale=8){               // Sprite -> PNG-Data-URL (hart skaliert, keine Weichzeichnung)
+  const key=name+scale; if(spriteCache[key]) return spriteCache[key];
+  const rows=SPR[name], h=rows.length, w=Math.max(...rows.map(r=>r.length));
+  const cv=document.createElement('canvas'); cv.width=w*scale; cv.height=h*scale;
+  const cx=cv.getContext('2d');
+  rows.forEach((row,y)=>[...row].forEach((ch,x)=>{ if(PAL[ch]){cx.fillStyle=PAL[ch];cx.fillRect(x*scale,y*scale,scale,scale);} }));
+  return spriteCache[key]=cv.toDataURL();
+}
+
+/* ---------- Daten: 5 Perk-Typen × 5 Seltenheiten ---------- */
+const RAR=[{n:'Gewöhnlich',w:60},{n:'Ungewöhnlich',w:25},{n:'Selten',w:10},{n:'Episch',w:4},{n:'Legendär',w:1}];
+const pct=v=>{const x=v*100;return (x<10?x.toFixed(1):x.toFixed(0)).replace('.',',')+'%'};
+const PERKS=[
+  {id:'prod', n:'Goldgräber', spr:'coin',     vals:[0.5,2,8,35,150],        txt:v=>`+${fmt(v)} Basis/s`, sum:'Basisproduktion'},
+  {id:'light',n:'Federkiel',  spr:'feather',  vals:[0.04,0.10,0.22,0.5,1.2],txt:v=>`Grenze S +${pct(v)}`, sum:'Gewichtsgrenze S'},
+  {id:'exp',  n:'Ballon',     spr:'balloon',  vals:[0.01,0.02,0.04,0.07,0.12],txt:v=>`Exponent p −${pct(v)}`, sum:'Gewichtsexponent p'},
+  {id:'auto', n:'Sanduhr',    spr:'hourglass',vals:[0.01,0.025,0.06,0.15,0.4],txt:v=>`+${String(v).replace('.',',')} Auto/s`, sum:'Auto-Öffnen'},
+  {id:'luck', n:'Kleeblatt',  spr:'clover',   vals:[0.01,0.025,0.06,0.15,0.4],txt:v=>`+${String(v).replace('.',',')} Glück`, sum:'Seltenheits-Glück'}
+];
+const P_MIN=0.5, P0=3, S0=60, PACK_BASE=20, PACK_GROW=1.12, PACK_SIZE=5, ESS_DIV=100;
+
+/* Essenz-Shop: Basiskosten, Kostenwachstum pro Stufe, Maximalstufe */
+const UPS=[
+  {id:'multi',n:'Mehrfach-Öffnung',base:3,g:2.2,max:9,d:l=>`${1+l} ${l?'Pakete':'Paket'} pro Öffnung (+1 je Stufe)`},
+  {id:'cost', n:'Rabattkarte',base:2,g:1.8,max:25,d:l=>`Paketpreis −6% je Stufe (jetzt ×${Math.pow(.94,l).toFixed(2)})`},
+  {id:'scale',n:'Leichtbau',base:2,g:1.9,max:30,d:l=>`Grenze S ×1,6 je Stufe (jetzt ×${fmt(Math.pow(1.6,l))})`},
+  {id:'exp',  n:'Windkanal',base:5,g:1.9,max:20,d:l=>`Start-Exponent −0,08 je Stufe (jetzt ${(P0-.08*l).toFixed(2).replace('.',',')})`},
+  {id:'free', n:'Starterpakete',base:2,g:1.7,max:30,d:l=>`${4*l} Gratis-Pakete zu Beginn jedes Runs`},
+  {id:'auto', n:'Auto-Motor',base:4,g:1.8,max:25,d:l=>`+${(.04*l).toFixed(2).replace('.',',')} Auto-Öffnungen/s dauerhaft`},
+  {id:'luck', n:'Glückskeks',base:3,g:1.8,max:20,d:l=>`+${(.1*l).toFixed(1).replace('.',',')} Glück dauerhaft`},
+  {id:'mult', n:'Verstärker',base:5,g:2,max:20,d:l=>`Essenz-Bonus +20% je Stufe (jetzt ×${(1+.2*l).toFixed(1).replace('.',',')})`},
+  {id:'gain', n:'Essenz-Magnet',base:6,g:2,max:20,d:l=>`+15% Essenz bei Prestige je Stufe`}
+];
+const upCost=(u,l)=>Math.ceil(u.base*Math.pow(u.g,l));
+
+/* ---------- Zahlenformat ---------- */
+const SUF=['','K','M','B','T','Qa','Qi','Sx','Sp','Oc','No','Dc'];
+function fmt(n){
+  if(!isFinite(n)) return '∞';
+  if(Number.isInteger(n)&&n<1000) return String(n);   // ganze Zahlen ohne Nachkommastellen
+  if(n<1000){ if(n>=100) return n.toFixed(0); if(n>=10) return n.toFixed(1).replace('.',','); return n.toFixed(2).replace('.',','); }
+  const e=Math.floor(Math.log10(n)/3);
+  if(e<SUF.length) return (n/Math.pow(1000,e)).toFixed(2).replace('.',',')+SUF[e];
+  return n.toExponential(2).replace('.',',').replace('e+','e');
+}
+
+/* ---------- Spielstand ---------- */
+const SAVE_KEY='federgewicht-v1';
+const fresh=()=>({coins:0,E:0,packs:0,cards:Array(25).fill(0),free:1,autoAcc:0,
+  ess:0,essLife:0,ups:{},prestiges:0,totalPacks:0,bestE:0,last:Date.now()});
+let G=load();
+function load(){
+  try{ const s=localStorage.getItem(SAVE_KEY); if(s){ return Object.assign(fresh(),JSON.parse(s)); } }catch(e){}
+  return fresh();
+}
+function save(){ G.last=Date.now(); try{ localStorage.setItem(SAVE_KEY,JSON.stringify(G)); }catch(e){} }
+const up=id=>G.ups[id]||0;
+
+/* ---------- Abgeleitete Werte (alles, was Karten & Shop bewirken) ---------- */
+function derive(){
+  let prod=0,sumS=0,lnP=0,auto=0,luck=0;
+  for(let r=0;r<5;r++){
+    prod+=G.cards[0*5+r]*PERKS[0].vals[r];
+    sumS+=G.cards[1*5+r]*PERKS[1].vals[r];                 // Grenze wächst mit der Summe (quadratisch)
+    lnP +=G.cards[2*5+r]*Math.log(1-PERKS[2].vals[r]);   // Exponent schrumpft multiplikativ
+    auto+=G.cards[3*5+r]*PERKS[3].vals[r];
+    luck+=G.cards[4*5+r]*PERKS[4].vals[r];
+  }
+  const D={};
+  D.base=1+prod;
+  D.mult=1+0.1*G.essLife*(1+0.2*up('mult'));              // Prestige-Hauptwährungsmultiplikator
+  D.S=S0*Math.pow(1+sumS,2)*Math.pow(1.6,up('scale'));
+  const p0=P0-0.08*up('exp');
+  D.p=P_MIN+(p0-P_MIN)*Math.exp(lnP);                     // nähert sich P_MIN, erreicht es nie
+  const ax=auto+0.04*up('auto');
+  D.auto=4*ax/(ax+3);                                     // weiche Obergrenze: max. 4 Öffnungen/s
+  D.luck=luck+0.1*up('luck');
+  D.multi=1+up('multi');
+  D.costMul=Math.pow(0.94,up('cost'));
+  D.w=1+Math.pow(G.E/D.S,D.p);                           // DAS GEWICHT
+  D.income=D.base*D.mult/D.w;
+  D.essGain=Math.floor(Math.pow(G.E/ESS_DIV,0.4)*(1+0.15*up('gain')));
+  return D;
+}
+const packCost=n=>PACK_BASE*Math.pow(PACK_GROW,n)*Math.pow(0.94,up('cost'));
+function bundleCost(k){                                  // Preis für k Pakete hintereinander (Gratis-Pakete zuerst)
+  let t=0; for(let i=0;i<k;i++){ if(G.free>i) continue; t+=packCost(G.packs+i); } return t;
+}
+function rarityProbs(luck){                              // Glück verschiebt Gewicht zu seltenen Stufen: w_i × (1+Luck)^i
+  const w=RAR.map((r,i)=>r.w*Math.pow(1+luck,i)); const s=w.reduce((a,b)=>a+b,0); return w.map(x=>x/s);
+}
+
+/* ---------- Pakete öffnen ---------- */
+let reveal=[], revealDirty=false;
+function openPacks(k,D){
+  const probs=rarityProbs(D.luck); let opened=0; const got=[];
+  for(let i=0;i<k;i++){
+    if(G.free>0) G.free--; else { const c=packCost(G.packs); if(G.coins<c) break; G.coins-=c; }
+    G.packs++; G.totalPacks++; opened++;
+    for(let j=0;j<PACK_SIZE;j++){
+      const t=Math.floor(Math.random()*5); let x=Math.random(),r=0;
+      while(r<4 && x>=probs[r]){ x-=probs[r]; r++; }
+      G.cards[t*5+r]++; got.push([t,r]);
+    }
+  }
+  if(opened){ reveal=got.slice(-10); revealDirty=true; }
+  return opened;
+}
+
+/* ---------- Ein Simulationsschritt ---------- */
+function step(dt){
+  let D=derive();
+  const gain=D.income*dt; G.coins+=gain; G.E+=gain; if(G.E>G.bestE) G.bestE=G.E;
+  if(D.auto>0){
+    G.autoAcc+=D.auto*dt; let n=0;
+    while(G.autoAcc>=1 && n<300){ if(!openPacks(D.multi,D)){ break; } G.autoAcc-=1; n++; D=derive(); }
+    G.autoAcc=Math.min(G.autoAcc,1.5);                   // nicht beliebig ansparen
+  }
+}
+
+/* ---------- Prestige & Shop ---------- */
+function prestige(){
+  const D=derive(); if(D.essGain<1) return false;
+  G.ess+=D.essGain; G.essLife+=D.essGain; G.prestiges++;
+  G.coins=0; G.E=0; G.packs=0; G.cards=Array(25).fill(0); G.autoAcc=0; G.free=4*up('free');
+  reveal=[]; revealDirty=true; save(); return true;
+}
+function buyUp(id){
+  const u=UPS.find(x=>x.id===id), l=up(id), c=upCost(u,l);
+  if(l>=u.max||G.ess<c) return; G.ess-=c; G.ups[id]=l+1; save();
+}
+
+/* ---------- UI ---------- */
+const $=id=>document.getElementById(id);
+$('icoCoin').src=sprite('coin',3); $('icoEss').src=sprite('crystal',3); $('icoEss2').src=sprite('crystal',9);
+$('icoPack').src=sprite('pack',9); $('icoWeight').src=sprite('weight',8);
+
+let tab='packs';
+$('tabs').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b) return; tab=b.dataset.tab;
+  [...$('tabs').children].forEach(x=>x.setAttribute('aria-selected',x===b));
+  for(const t of ['packs','coll','pres']) $('tab-'+t).hidden=(t!==tab);
+  render(true);
+});
+$('packbtn').addEventListener('click',()=>{ const D=derive(); openPacks(D.multi,D); render(true); });
+
+let confirmT=0;                                          // Zweistufige Bestätigung (kein confirm() nötig)
+function twoStep(btn,label,action){
+  btn.addEventListener('click',()=>{
+    if(Date.now()<confirmT && btn.dataset.armed){ btn.dataset.armed=''; confirmT=0; action(); render(true); return; }
+    btn.dataset.armed='1'; confirmT=Date.now()+3500; btn.textContent='SICHER? NOCHMAL KLICKEN';
+    setTimeout(()=>{ if(btn.dataset.armed){ btn.dataset.armed=''; render(true); } },3600);
+  });
+}
+twoStep($('presBtn'),'PRESTIGE',()=>{ if(prestige()) toast('Prestige! Neue Essenz erhalten.'); });
+twoStep($('resetBtn'),'',()=>{ G=fresh(); reveal=[]; revealDirty=true; save(); toast('Spielstand gelöscht.'); });
+
+let toastT; function toast(msg){ const t=$('toast'); t.textContent=msg; t.hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>t.hidden=true,3500); }
+
+/* Karten-Element für Reveal */
+function cardEl(t,r,i){
+  const p=PERKS[t], d=document.createElement('div'); d.className='card r'+r; d.style.animationDelay=(i*70)+'ms';
+  d.innerHTML=`<img src="${sprite(p.spr,6)}" alt=""><div class="n">${p.n}</div><div class="e">${p.txt(p.vals[r])}</div><div class="rn">${RAR[r].n}</div>`;
+  return d;
+}
+
+let shopBuilt=false, collBuilt=false, lastRevealRender=0;
+function render(force){
+  const D=derive();
+  $('coins').textContent=fmt(G.coins); $('ips').textContent=fmt(D.income)+'/s'; $('essTop').textContent=fmt(G.ess);
+
+  // Gewicht
+  const brake=1-1/D.w;
+  $('brake').style.width=(brake*100).toFixed(1)+'%';
+  $('brakeTxt').textContent='BREMSE '+(brake*100).toFixed(1).replace('.',',')+'%';
+  $('stats').innerHTML=[
+    ['Verdient (E)',fmt(G.E)],['Grenze S',fmt(D.S)],['Exponent p',D.p.toFixed(3).replace('.',',')],['Gewicht w',fmt(D.w)],
+    ['Basis',fmt(D.base)+'/s'],['Prestige-Bonus','×'+fmt(D.mult)]
+  ].map(([a,b])=>`<div class="stat"><small>${a}</small><b>${b}</b></div>`).join('');
+
+  if(tab==='packs'){
+    const k=D.multi, cost=bundleCost(k), can=G.free>0||G.coins>=packCost(G.packs);
+    $('packbtn').disabled=!can;
+    $('packLabel').textContent=k>1?`ÖFFNEN ×${k}`:'ÖFFNEN';
+    $('packCost').textContent=G.free>0?`${G.free} gratis`:fmt(cost)+' Münzen';
+    const probs=rarityProbs(D.luck);
+    $('packInfo').innerHTML=`Nächstes Paket: <span class="gold">${fmt(packCost(G.packs))}</span> Münzen · Pakete in diesem Run: ${G.packs}<br>`+
+      (D.auto>0?`Auto-Öffnen: <span class="gold">${fmt(D.auto)}</span>×/s (je ${k} Pakete)`:`Auto-Öffnen: noch nicht freigeschaltet (Sanduhr-Karten)`);
+    $('probs').innerHTML=probs.map((p,i)=>`<div class="prob r${i}" style="box-shadow:inset 0 -4px 0 var(--rc)"><b style="color:var(--rc)">${RAR[i].n.slice(0,6).toUpperCase()}</b>${(p*100).toFixed(p<.01?2:1).replace('.',',')}%</div>`).join('');
+    if(revealDirty && (force||Date.now()-lastRevealRender>700)){
+      const box=$('reveal'); box.innerHTML='';
+      if(!reveal.length) box.innerHTML='<div class="empty">Öffne ein Paket. Jedes enthält 5 Karten.</div>';
+      reveal.forEach(([t,r],i)=>box.appendChild(cardEl(t,r,i)));
+      revealDirty=false; lastRevealRender=Date.now();
+    }
+  }
+
+  if(tab==='coll'){
+    $('collection').innerHTML=PERKS.map((p,t)=>{
+      let totalTxt='';
+      const cells=RAR.map((r,i)=>{ const c=G.cards[t*5+i];
+        return `<div class="cell r${i}${c?'':' zero'}"><img src="${sprite(p.spr,4)}" alt=""><b>${c}×</b><small>${p.txt(p.vals[i])}</small></div>`; }).join('');
+      const eff={prod:`${fmt(D.base)}/s`,light:`S = ${fmt(D.S)}`,exp:`p = ${D.p.toFixed(3).replace('.',',')}`,auto:`${fmt(D.auto)}/s`,luck:`${fmt(D.luck)}`}[p.id];
+      return `<div><div class="collhead"><span class="head">${p.n}</span><span>${p.sum}: <span class="gold">${eff}</span></span></div><div class="collrow">${cells}</div></div>`;
+    }).join('');
+  }
+
+  if(tab==='pres'){
+    const g=D.essGain, newLife=G.essLife+g, nm=1+0.1*newLife*(1+0.2*up('mult'));
+    $('presInfo').innerHTML=`Du erhältst jetzt: <span class="essc">${fmt(g)} Essenz</span> (aus ${fmt(G.E)} verdientem Gold)<br>`+
+      `Bonus: ×${fmt(D.mult)} → <span class="gold">×${fmt(nm)}</span> · Gesamt-Essenz: ${fmt(G.essLife)}<br>`+
+      `<span style="color:var(--dim)">Zurückgesetzt: Münzen, Karten, Paketpreis. Bleibt: Essenz & Shop.</span>`;
+    const pb=$('presBtn'); pb.disabled=g<1; if(!pb.dataset.armed) pb.textContent=g<1?'ZU WENIG GOLD':'PRESTIGE';
+    pb.className='btn '+(pb.dataset.armed?'warn':'ess');
+    if(!shopBuilt){
+      $('shop').innerHTML=UPS.map(u=>`<div class="up" id="up-${u.id}"><div class="t"><span class="head">${u.n}</span><span class="lvl"></span></div><p></p><button></button></div>`).join('');
+      $('shop').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; buyUp(b.closest('.up').id.slice(3)); render(true); });
+      shopBuilt=true;
+    }
+    UPS.forEach(u=>{ const el=$('up-'+u.id), l=up(u.id), c=upCost(u,l), maxed=l>=u.max;
+      el.querySelector('.lvl').textContent=`Stufe ${l}/${u.max}`;
+      el.querySelector('p').textContent=u.d(l);
+      const b=el.querySelector('button'); b.disabled=maxed||G.ess<c; b.classList.toggle('can',!maxed&&G.ess>=c);
+      b.textContent=maxed?'MAX':`${fmt(c)} Essenz`; });
+  }
+  $('foot').textContent=`Prestiges: ${G.prestiges} · Pakete gesamt: ${fmt(G.totalPacks)} · Bester Run: ${fmt(G.bestE)}`;
+}
+
+/* ---------- Hauptschleife (Wanduhrzeit, damit Hintergrund-Tabs nichts verlieren) ---------- */
+let lastWall=Date.now(), saveT=0;
+function catchUp(sec){                                   // Offline-Fortschritt: bis zu 2 h, in groben Schritten
+  sec=Math.min(sec,7200); const n=Math.min(3000,Math.ceil(sec)); const dt=sec/n; const before=G.coins;
+  for(let i=0;i<n;i++) step(dt);
+  return G.coins-before;
+}
+function tick(){
+  const now=Date.now(); let el=(now-lastWall)/1000; lastWall=now;
+  if(el>2){ const g=catchUp(el); toast(`Willkommen zurück! Während deiner Abwesenheit: +${fmt(g)} Münzen netto.`); }
+  else step(el);
+  if(now-saveT>5000){ save(); saveT=now; }
+  render(false);
+}
+// Beim Laden: Zeit seit dem letzten Speichern nachholen
+(function init(){ const el=(Date.now()-G.last)/1000; if(el>10){ const g=catchUp(el); toast(`Willkommen zurück! Offline: +${fmt(g)} Münzen netto.`); } lastWall=Date.now(); revealDirty=true; render(true); })();
+setInterval(tick,100);
+window.addEventListener('beforeunload',save);
+window.__game={get G(){return G},step,derive,openPacks,prestige,buyUp,packCost,UPS,set G(v){G=v}};  // Debug/Balancing-Hook
+</script>
+</body></html>

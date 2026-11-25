@@ -1,0 +1,15 @@
+{
+  "name": "federgewicht",
+  "version": "1.0.0",
+  "main": "main.js",
+  "description": "Federgewicht - Pixel Idle Game",
+  "license": "MIT",
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "electron": "^33.4.11"
+  },
+  "scripts": {
+    "start": "electron .",
+    "package": "electron-packager . Federgewicht --platform=win32 --arch=x64 --out=../dist --overwrite --prune=true"
+  }
+}
