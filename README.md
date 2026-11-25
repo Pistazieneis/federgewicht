@@ -10,3 +10,6 @@ npm run package
 Ergebnis: `dist/Federgewicht-win32-x64/Federgewicht.exe`
 
 Oder auf GitHub: Reiter **Actions** -> "Build Windows EXE" -> Artifact `Federgewicht-Windows`.
+
+## Lizenz
+Proprietär, alle Rechte vorbehalten. Siehe `LICENSE`.
