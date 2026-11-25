@@ -1,10 +1,15 @@
-# Baut die Windows-.exe auf GitHub. Bei einem Tag wie v1.0.0 wird zusätzlich ein Release mit Zip erstellt.
+# Baut die Windows-.exe auf GitHub. Bei einem Tag (v*) oder manuellem Start mit Version wird ein Release mit Zip erstellt.
 name: Build Windows EXE
 on:
   push:
     branches: [main]
     tags: ['v*']
-  workflow_dispatch:
+  workflow_dispatch:           # manuell starten: Actions -> Run workflow, Version eintragen -> erzeugt Release
+    inputs:
+      version:
+        description: 'Release-Version (z.B. v1.0.0), leer = nur bauen'
+        required: false
+        default: 'v1.0.0'
 permissions:
   contents: write            # nötig, damit der Workflow ein Release anlegen darf
 jobs:
@@ -26,7 +31,9 @@ jobs:
           name: Federgewicht-Windows
           path: Federgewicht-Windows.zip
       - name: Release veröffentlichen
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.version != '')
         shell: pwsh
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: gh release create "${{ github.ref_name }}" Federgewicht-Windows.zip --title "Federgewicht ${{ github.ref_name }}" --notes "Windows-Version. Zip entpacken und Federgewicht.exe starten."
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
+        run: gh release create "$env:TAG" Federgewicht-Windows.zip --target "${{ github.sha }}" --title "Federgewicht $env:TAG" --notes "Windows-Version. Zip entpacken und Federgewicht.exe starten."
