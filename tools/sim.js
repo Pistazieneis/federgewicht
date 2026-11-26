@@ -1,7 +1,9 @@
-// Balance-Simulation: ein "Spieler" kauft im Upgrade-Fenster immer das beste
-// Preis-Leistungs-Angebot, klickt nicht. Aufruf: node tools/sim.js [anzahl_meteoriten]
+// Balance-Simulation. Ein "Spieler" kauft im Shop immer das beste Preis-Leistungs-Angebot
+// und startet dann einen Lauf (Objekte fallen nacheinander, bis eines einschlägt).
+// Aufruf: node tools/sim.js [anzahl_läufe]
 const C = require('../desktop/core.js');
 
+/** Kauft im Shop alles Sinnvolle: erst nach bester Abbau-pro-Kosten-Rate, dann Spezial/Forschung. */
 function shopGreedy(s) {
   for (let guard = 0; guard < 500; guard++) {
     const r0 = C.baseRate(s);
@@ -22,19 +24,26 @@ function shopGreedy(s) {
   C.FP_SHOP.forEach((d) => { while (C.buyFp(s, d.id)); });
 }
 
-const N = +process.argv[2] || 40;
-const s = C.newState();
-let clock = 0;
-console.log('  n | Masse       | Zeit | zerstört | Rate/s     | ΔM gesamt   | FP-Angebot | Ir');
-for (let k = 0; k < N; k++) {
-  shopGreedy(s);
-  const n = s.meteorN, rate = C.baseRate(s);
+/** Spielt einen kompletten Lauf. Gibt Sekunden und Ergebnis zurück. */
+function playRun(s) {
   C.startMeteor(s);
-  const m = s.meteor; let res = null;
-  while (!res) { res = C.tick(s, 0.25); }
-  clock += m.time - Math.max(0, m.timeLeft) ;
-  console.log(String(n).padStart(3), '|', C.fmtMass(m.mass).padEnd(11), '|', String(Math.round(m.time)).padStart(4), '|',
-    (res.destroyed ? 'JA  ' : (res.fraction * 100).toFixed(0).padStart(3) + '%'), '    |', C.fmtMass(rate).padEnd(10), '|',
-    C.fmtMass(s.totalDm).padEnd(11), '|', String(C.prestigeGain(s)).padStart(5), '     |', s.iridium,
-    ' t=' + (clock / 60).toFixed(1) + 'min');
+  let secs = 0, res = null;
+  while (s.phase === 'fight') { res = C.tick(s, 0.25); secs += 0.25; }
+  return { secs, res };
+}
+
+module.exports = { shopGreedy, playRun };
+
+if (require.main === module) {
+  const N = +process.argv[2] || 30;
+  const s = C.newState(); let clock = 0;
+  console.log('Lauf | Zeit  | zerstört | letztes Objekt (Einschlag)   | Rate/s     | ΔM gesamt   | FP    | Ir');
+  for (let k = 1; k <= N; k++) {
+    shopGreedy(s);
+    const rate = C.baseRate(s), { secs, res } = playRun(s);
+    clock += secs + 8;                                   // 8 s Shopzeit pro Lauf geschätzt
+    const nm = `${res.name || res.cls + ' ' + res.n} (${(res.fraction * 100).toFixed(0)} %)`;
+    console.log(String(k).padStart(4), '|', ((clock / 60).toFixed(1) + 'm').padStart(6), '|', String(s.run.kills).padStart(8), '|',
+      nm.padEnd(28), '|', C.fmtMass(rate).padEnd(10), '|', C.fmtMass(s.totalDm).padEnd(11), '|', String(C.prestigeGain(s)).padStart(5), '|', s.iridium);
+  }
 }

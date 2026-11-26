@@ -108,7 +108,7 @@
       else if (kind === 'fp') r = C.buyFp(S, id);
       if (!r) break; ok = true;
     }
-    if (ok) { updateShops(); updateHud(); }
+    if (ok) { Sfx.play(kind === 'bot' ? 'buy' : 'upgrade'); updateShops(); updateHud(); }
   });
 
   $('btnPrestige').addEventListener('click', (e) => {
@@ -116,7 +116,7 @@
     if (gain < 1) return;
     // Erst beim zweiten Klick wird wirklich neu gestartet
     confirmClick(e.currentTarget, () => {
-      if (C.prestige(S)) { toast(`+${gain} Forschung`); showReport(); save(); updateShops(); updateHud(); }
+      if (C.prestige(S)) { Sfx.play('prestige'); toast(`+${gain} Forschung`); showReport(); save(); updateShops(); updateHud(); }
     }, 'Sicher? Bots und Upgrades werden zurückgesetzt – nochmal klicken');
   });
 
@@ -193,23 +193,34 @@
   function withBots(s, i, extra) { const c = Object.assign({}, s, { bots: s.bots.slice() }); c.bots[i] += extra; return c; }
 
   /* ----------------------------------------------------------- 3. HUD */
+  // Kleine Sprüche, damit der Weltuntergang sympathisch bleibt
+  const pick = (a) => a[(Math.random() * a.length) | 0];
+  const KILL_QUIPS = ['Sicher entsorgt.', 'Das war knapp.', 'Die Versicherung atmet auf.', 'Schon wieder Glück gehabt.', 'Sauber weggeräumt.', 'Der Nachbar wird nichts merken.', 'Fachgerecht zerlegt.'];
+  const BOOM_QUIPS = ['Hoppla. Die Erde ist weg.', 'Das gibt Ärger mit der Hausverwaltung.', 'Nicht schlimm, wir haben ja noch eine.', 'Die Erde hat es kommen sehen.', 'Tschüss, Erde. Danke für den Fisch.', 'Kann ja mal passieren.', 'Das Meeting fällt dann wohl aus.'];
+
+  /** Anzeigename eines Objekts, z. B. "🚲 Fahrrad" (ernste Objekte haben kein Emoji). */
+  const label = (o) => (o.emoji ? o.emoji + ' ' : '') + o.name;
+
   function forecast(rateNow, m) {
-    // Grobe Prognose ohne Klicks: Wie viel der Masse schafft man in der Restzeit?
+    // Grobe Prognose: Wie viel der Masse schafft man in der Restzeit?
     const t = m.timeLeft;
     const resonance = 0.005 * (S.special.resonance || 0);
     const mined = rateNow * (t + resonance * t * t / 2);
     return Math.min(1, mined / Math.max(1e-9, m.remaining));
   }
   function forecastText(f) {
-    if (f >= 1) return ['Zerstörung wahrscheinlich', 'good'];
-    if (f >= 0.6) return [`Knapp: ca. ${Math.floor(f * 100)} % abbaubar`, 'mid'];
-    return [`Nicht genug: ca. ${Math.floor(f * 100)} % abbaubar`, 'bad'];
+    if (f >= 1) return ['Sieht gut aus', 'good'];
+    if (f >= 0.6) return [`Wird knapp (${Math.floor(f * 100)} %)`, 'mid'];
+    return [`Schlechte Aussichten (${Math.floor(f * 100)} %)`, 'bad'];
   }
+
+  let boom = null;          // läuft gerade die Erdexplosion? (siehe Szene)
 
   function updateHud() {
     const m = S.meteor, fight = S.phase === 'fight';
+    // Während der Explosion zeigt die Szene alles allein; danach erscheint das Upgrade-Fenster
     $('hudFight').classList.toggle('on', fight);
-    $('hudShop').classList.toggle('on', !fight);
+    $('hudShop').classList.toggle('on', !fight && !boom);
 
     setText($('rDm'), C.fmtMass(S.dm));
     setText($('rRate'), rate(C.currentRate(S)));
@@ -220,12 +231,14 @@
     setText($('rBonus'), 'Bonus ×' + C.prestigeMult(S).toFixed(2).replace('.', ','));
     $('tabSpec').hidden = !(S.iridium > 0 || S.destroyed > 0 || Object.keys(S.special).length > 0);
 
-    const clsTxt = `${m.cls} · Stufe ${m.pos}/${m.classCount === Infinity ? '∞' : m.classCount}`;
+    const clsTxt = `${m.cls} · ${m.pos}/${m.classCount === Infinity ? '∞' : m.classCount}`;
     if (fight) {
-      setText($('mName'), m.name); setText($('mClass'), clsTxt);
+      setText($('mName'), label(m)); setText($('mClass'), clsTxt);
       setText($('mRemain'), `${C.fmtMass(Math.max(0, m.remaining))} / ${C.fmtMass(m.mass)}`);
       $('barMass').style.width = Math.max(0, m.remaining / m.mass * 100) + '%';
       setText($('mRate'), rate(C.currentRate(S)));
+      setText($('mRun'), `Objekt ${m.n} · ${S.run.kills} zerstört`);
+      setText($('mRunGain'), '+' + C.fmtMass(S.run.gain));
       setText($('mTime'), C.fmtTime(m.timeLeft));
       const frac = Math.max(0, m.timeLeft / m.time);
       const bt = $('barTime'); bt.style.width = frac * 100 + '%';
@@ -234,32 +247,42 @@
       // Entfernung: startet bei ~384.400 km (Mondentfernung) und sinkt mit der Restzeit auf 0
       setText($('mDist'), Math.round(384400 * Math.max(0, m.timeLeft) / m.time).toLocaleString('de-DE') + ' km');
     } else {
-      setText($('nName'), m.name); setText($('nClass'), clsTxt);
+      // Vorschau: Jeder Lauf beginnt wieder beim leichtesten Objekt
+      const blast = 1 - 0.03 * (S.special.charge || 0);
+      setText($('nName'), 'Nächster Lauf'); setText($('nClass'), 'Start: ' + label(m));
       setText($('nMass'), C.fmtMass(m.mass)); setText($('nTime'), C.fmtTime(m.time));
-      setText($('nNeed'), rate(m.mass * (1 - 0.03 * (S.special.charge || 0)) / m.time));
+      setText($('nNeed'), rate(m.mass * blast / m.time));
       setText($('nHave'), rate(C.baseRate(S)));
-      const [ft, cls] = forecastText(forecast(C.baseRate(S), Object.assign({}, m, { timeLeft: m.time, remaining: m.mass * (1 - 0.03 * (S.special.charge || 0)) })));
-      const fe = $('nForecast'); setText(fe, 'Prognose: ' + ft); fe.className = 'forecast ' + cls;
+      const [ft, cls] = forecastText(forecast(C.baseRate(S), Object.assign({}, m, { timeLeft: m.time, remaining: m.mass * blast })));
+      const fe = $('nForecast'); setText(fe, 'Das erste Objekt: ' + ft); fe.className = 'forecast ' + cls;
     }
   }
 
-  /** Ergebnisbericht nach einem Meteoriten (oben links im Upgrade-Fenster). */
+  /** Ergebnisbericht nach einem Lauf (oben links im Upgrade-Fenster). */
   function showReport() {
     const r = S.last, box = $('report');
     box.hidden = !r;
     if (!r) return;
     const head = $('repHead');
-    head.className = 'rep-head ' + (r.destroyed ? 'good' : 'bad');
-    head.textContent = r.destroyed ? `${r.name} vollständig zerstört` : `${r.name} ist eingeschlagen`;
+    head.className = 'rep-head bad';
+    head.textContent = S.impacts > 1 ? 'Die Erde ist explodiert (schon wieder).' : 'Die Erde ist explodiert.';
     const rows = [
-      ['Masse', C.fmtMass(r.mass)],
-      ['Abgebaut', `${C.fmtMass(r.mined)} (${Math.floor(r.fraction * 100)} %)`],
-      ['ΔM gewonnen', '+' + C.fmtMass(r.gain)]
+      ['Schuld war', label(r)],
+      ['Zerstört im Lauf', `${r.run.kills} ${r.run.kills === 1 ? 'Objekt' : 'Objekte'}`],
+      ['ΔM im Lauf', '+' + C.fmtMass(r.run.gain)]
     ];
-    if (r.destroyed) rows.push(['Iridium gefunden', '+' + r.iridium]);
-    else rows.push(['Folge', 'Neustart bei Stufe 1']);      // Einschlag setzt die Stufe zurück
-    rows.push(['Rekord', 'Stufe ' + r.best]);
+    if (r.run.iridium > 0) rows.push(['Iridium gefunden', '+' + r.run.iridium]);
+    rows.push(['Rekord', r.best > 0 ? `${r.best} Objekte (bis ${r.bestName || 'Asteroid'})` : '–']);
     $('repBody').innerHTML = rows.map(([a, b]) => `<span class="muted">${a}</span><b>${b}</b>`).join('');
+  }
+
+  /** Meldung "Objekt zerstört" unten links. */
+  function addFeed(res) {
+    const f = $('feed'), d = document.createElement('div');
+    d.innerHTML = `${label(res)} zerstört <b>+${C.fmtMass(res.gain)}</b>${res.iridium ? ' · +' + res.iridium + ' Iridium' : ''}<small>${pick(KILL_QUIPS)}</small>`;
+    f.appendChild(d);
+    while (f.children.length > 4) f.firstChild.remove();
+    setTimeout(() => d.remove(), 5200);
   }
 
   /* ------------------------------------------------------ 4. Szene (Canvas) */
@@ -278,10 +301,11 @@
   function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 
   const R = rng(7);
-  const stars = Array.from({ length: 220 }, () => ({ x: R(), y: R() * 0.85, r: R() * 1.2 + 0.2, a: R() * 0.6 + 0.3, ph: R() * 6.28 }));
-  const lands = Array.from({ length: 9 }, () => ({ x: R() * 2 - 1, y: R() * 0.9 - 0.2, r: R() * 0.22 + 0.06 }));
+  const stars = Array.from({ length: 220 }, () => ({ x: R(), y: R() * 0.95, r: R() * 1.2 + 0.2, a: R() * 0.6 + 0.3, ph: R() * 6.28 }));
+  // Kontinente als Flecken auf der Erdkugel: Winkel, Abstand vom Mittelpunkt, Größe (alles relativ zum Erdradius)
+  const lands = Array.from({ length: 10 }, () => ({ a: R() * 6.28, d: R() * 0.72, r: R() * 0.2 + 0.08, rot: R() * 3 }));
 
-  // Gestalt des Gesteinsbrockens: unregelmäßiges Vieleck + Krater, aus der Nummer des Meteoriten erzeugt
+  // Gestalt eines Gesteinsbrockens: unregelmäßiges Vieleck + Krater, aus der Nummer erzeugt
   const shapeCache = {};
   function shapeFor(seed) {
     if (shapeCache[seed]) return shapeCache[seed];
@@ -298,10 +322,13 @@
 
   const parts = [];      // Partikel (Funken, Staub, Trümmer)
   const rings = [];      // Druckwellen
-  let flash = 0;         // Bildschirmblitz (0..1)
+  let flash = 0;         // Bildschirmblitz (0..1+)
   let shake = 0;         // Wackeln (Pixel)
-  let rot = 0, clock = 0;
-  let lastMass = 1, meteorPos = { x: 0, y: 0, r: 20 };
+  let clock = 0;
+  let spawnT = 1;        // 0..1: Einblenden eines neuen Objekts
+  let earthT = 1;        // 0..1: Erde (neu) erscheinen lassen
+  let lastPos = { x: 0, y: 0, r: 20 };
+  const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
 
   function spawn(x, y, n, speedMax, colors, life, size) {
     for (let i = 0; i < n; i++) {
@@ -310,33 +337,38 @@
     }
   }
 
-  function earth() { return { x: W * 0.5, y: H * 1.62, r: Math.max(W * 0.62, H * 0.9) }; }
+  /** Lage und Größe der Erde: komplett sichtbar am unteren Rand (damit sie schön explodieren kann). */
+  function earth() { const r = Math.min(H * 0.21, W * 0.3); return { x: W * 0.5, y: H - r * 1.15, r }; }
+  /** Feste Bildgröße für ALLE Objekte (egal ob Fahrrad oder Asteroid), damit nichts wild herumzoomt. */
+  function baseRadius() { return Math.min(H * 0.1, W * 0.13); }
 
-  function drawEarth() {
-    const e = earth();
+  function drawEarth(e, alpha, scale) {
+    ctx.save(); ctx.globalAlpha = alpha; ctx.translate(e.x, e.y); ctx.scale(scale, scale); ctx.translate(-e.x, -e.y);
     // Atmosphärenschein
-    let g = ctx.createRadialGradient(e.x, e.y, e.r * 0.97, e.x, e.y, e.r * 1.06);
+    let g = ctx.createRadialGradient(e.x, e.y, e.r * 0.97, e.x, e.y, e.r * 1.14);
     g.addColorStop(0, 'rgba(110,170,255,.55)'); g.addColorStop(1, 'rgba(110,170,255,0)');
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(e.x, e.y, e.r * 1.06, 0, 6.2832); ctx.fill();
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(e.x, e.y, e.r * 1.14, 0, 6.2832); ctx.fill();
     // Ozean
-    g = ctx.createRadialGradient(e.x - e.r * 0.3, e.y - e.r * 0.5, e.r * 0.2, e.x, e.y, e.r);
-    g.addColorStop(0, '#2f6aa8'); g.addColorStop(0.6, '#173f6c'); g.addColorStop(1, '#09182c');
+    g = ctx.createRadialGradient(e.x - e.r * 0.35, e.y - e.r * 0.4, e.r * 0.2, e.x, e.y, e.r);
+    g.addColorStop(0, '#3a7bc0'); g.addColorStop(0.6, '#1a4678'); g.addColorStop(1, '#0a1c33');
     ctx.fillStyle = g; ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, 6.2832); ctx.fill();
-    // Landmassen und Wolken (innerhalb der Kugel zugeschnitten)
+    // Landmassen und Wolken (innerhalb der Kugel zugeschnitten), drehen sich langsam
     ctx.save(); ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, 6.2832); ctx.clip();
+    const spin = clock * 0.03;
     lands.forEach((l, i) => {
-      ctx.fillStyle = i % 3 === 0 ? 'rgba(86,110,70,.75)' : 'rgba(110,100,70,.65)';
-      ctx.beginPath(); ctx.ellipse(e.x + l.x * e.r * 0.9, e.y - e.r * (0.55 + l.y * 0.35), l.r * e.r * 1.2, l.r * e.r * 0.5, i, 0, 6.2832); ctx.fill();
+      const a = l.a + spin;
+      ctx.fillStyle = i % 3 === 0 ? 'rgba(92,120,72,.85)' : 'rgba(120,108,72,.8)';
+      ctx.beginPath(); ctx.ellipse(e.x + Math.cos(a) * l.d * e.r, e.y + Math.sin(a) * l.d * e.r, l.r * e.r * 1.3, l.r * e.r * 0.7, l.rot + spin, 0, 6.2832); ctx.fill();
     });
-    ctx.fillStyle = 'rgba(255,255,255,.07)';
-    for (let i = 0; i < 7; i++) { const l = lands[i]; ctx.beginPath(); ctx.ellipse(e.x + l.y * e.r, e.y - e.r * (0.6 + l.x * 0.25), e.r * 0.18, e.r * 0.025, l.x, 0, 6.2832); ctx.fill(); }
+    ctx.fillStyle = 'rgba(255,255,255,.1)';
+    for (let i = 0; i < 6; i++) { const l = lands[i], a = l.a * 2 - spin * 1.6; ctx.beginPath(); ctx.ellipse(e.x + Math.cos(a) * 0.5 * e.r, e.y + Math.sin(a) * 0.6 * e.r, e.r * 0.3, e.r * 0.04, l.rot, 0, 6.2832); ctx.fill(); }
     // Schattenseite (Licht kommt von links oben)
-    g = ctx.createLinearGradient(e.x - e.r, e.y - e.r, e.x + e.r, e.y);
-    g.addColorStop(0.4, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,10,.65)');
+    g = ctx.createLinearGradient(e.x - e.r, e.y - e.r, e.x + e.r, e.y + e.r);
+    g.addColorStop(0.35, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,12,.7)');
     ctx.fillStyle = g; ctx.fillRect(e.x - e.r, e.y - e.r, e.r * 2, e.r * 2);
     ctx.restore();
-    // feine Atmosphärenkante
     ctx.strokeStyle = 'rgba(150,200,255,.5)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, 6.2832); ctx.stroke();
+    ctx.restore();
   }
 
   function drawStars(t) {
@@ -347,19 +379,20 @@
     });
   }
 
-  /** Zeichnet den Brocken an Position (x,y) mit Radius r. 'rem' = Anteil der verbleibenden Masse. */
-  function drawRock(x, y, r, seed, rem, dim, heat) {
-    const sh = shapeFor(seed);
-    ctx.save(); ctx.translate(x, y);
-    // Staubschweif entgegen der Flugrichtung (Richtung Erde = nach unten rechts/links)
-    const ang = Math.atan2(earth().y - y, earth().x - x);
+  /** Feuerschweif hinter dem Objekt (entgegen der Flugrichtung) und Glühen auf der Vorderseite. */
+  function drawTrail(r, ang, heat) {
     ctx.save(); ctx.rotate(ang + Math.PI);
-    const tail = ctx.createLinearGradient(0, 0, r * (2.2 + heat * 3), 0);
-    tail.addColorStop(0, `rgba(255,${150 - heat * 50 | 0},60,${0.05 + 0.35 * heat})`); tail.addColorStop(1, 'rgba(255,120,40,0)');
-    ctx.fillStyle = tail; ctx.beginPath(); ctx.moveTo(0, -r * 0.8); ctx.lineTo(r * (2.2 + heat * 3), 0); ctx.lineTo(0, r * 0.8); ctx.fill();
+    const len = r * (2.4 + heat * 3.2);
+    const tail = ctx.createLinearGradient(0, 0, len, 0);
+    tail.addColorStop(0, `rgba(255,${160 - heat * 60 | 0},60,${0.1 + 0.4 * heat})`); tail.addColorStop(1, 'rgba(255,120,40,0)');
+    ctx.fillStyle = tail; ctx.beginPath(); ctx.moveTo(0, -r * 0.8); ctx.lineTo(len, 0); ctx.lineTo(0, r * 0.8); ctx.fill();
     ctx.restore();
-    ctx.rotate(rot * (0.4 + (seed % 5) * 0.1));
-    ctx.globalAlpha = dim ? 0.8 : 1;
+  }
+
+  /** Gesteinsbrocken (ernste Objekte). 'spin' = Drehwinkel. */
+  function drawRock(r, seed, spin, ang, heat) {
+    const sh = shapeFor(seed);
+    ctx.save(); ctx.rotate(spin);
     ctx.beginPath(); sh.pts.forEach((p, i) => (i ? ctx.lineTo(p[0] * r, p[1] * r) : ctx.moveTo(p[0] * r, p[1] * r))); ctx.closePath();
     const g = ctx.createRadialGradient(-r * 0.4, -r * 0.4, r * 0.1, 0, 0, r * 1.1);
     g.addColorStop(0, '#8d8579'); g.addColorStop(0.55, '#4b463f'); g.addColorStop(1, '#16130f');
@@ -369,9 +402,8 @@
       ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.beginPath(); ctx.arc(c.x * r, c.y * r, c.r * r, 0, 6.2832); ctx.fill();
       ctx.strokeStyle = 'rgba(255,240,220,.16)'; ctx.lineWidth = Math.max(1, r * 0.015); ctx.beginPath(); ctx.arc(c.x * r - r * 0.012, c.y * r - r * 0.012, c.r * r, 3.4, 5.6); ctx.stroke();
     });
-    // Hitze auf der der Erde zugewandten Seite
-    if (heat > 0) {
-      ctx.rotate(-rot * (0.4 + (seed % 5) * 0.1)); ctx.rotate(ang);
+    if (heat > 0) {                                 // Hitze auf der der Erde zugewandten Seite
+      ctx.rotate(-spin); ctx.rotate(ang);
       const hg = ctx.createRadialGradient(r * 0.9, 0, r * 0.1, r * 0.9, 0, r * 1.2);
       hg.addColorStop(0, `rgba(255,170,70,${0.7 * heat})`); hg.addColorStop(1, 'rgba(255,90,20,0)');
       ctx.fillStyle = hg; ctx.fillRect(-r * 1.5, -r * 1.5, r * 3, r * 3);
@@ -379,56 +411,148 @@
     ctx.restore(); ctx.restore();
   }
 
-  /** Bots: kleine Lichtpunkte umkreisen den Brocken und schießen Laser auf ihn. */
-  function drawBots(x, y, r, dt) {
+  /** Alltagsobjekt als Emoji. Es taumelt (dreht sich) und wippt leicht, das sieht charmant aus. */
+  function drawEmoji(emoji, r, spin, heat) {
+    ctx.save();
+    if (heat > 0) {                                 // glühende Hülle bei Annäherung an die Erde
+      const hg = ctx.createRadialGradient(0, 0, r * 0.2, 0, 0, r * 1.5);
+      hg.addColorStop(0, `rgba(255,190,90,${0.55 * heat})`); hg.addColorStop(1, 'rgba(255,90,20,0)');
+      ctx.fillStyle = hg; ctx.beginPath(); ctx.arc(0, 0, r * 1.5, 0, 6.2832); ctx.fill();
+    }
+    ctx.rotate(spin);
+    ctx.font = `${Math.round(r * 2)}px ${EMOJI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(emoji, 0, r * 0.06);
+    ctx.restore();
+  }
+
+  /** Bots: kleine Lichtpunkte umkreisen das Objekt und schießen Laser darauf. */
+  function drawBots(r, dt) {
     const total = S.bots.reduce((a, b) => a + b, 0);
     const n = Math.min(14, total === 0 ? 0 : Math.ceil(Math.sqrt(total) * 1.4));
     ctx.lineWidth = 1;
     for (let i = 0; i < n; i++) {
       const a = clock * (0.5 + (i % 3) * 0.12) * (i % 2 ? 1 : -1) + i * 6.2832 / n;
       const d = r * (1.35 + (i % 4) * 0.12);
-      const bx = x + Math.cos(a) * d, by = y + Math.sin(a) * d * 0.8;
-      // Zielpunkt auf der Oberfläche
-      const tx = x + Math.cos(a) * r * 0.85, ty = y + Math.sin(a) * r * 0.85;
-      ctx.strokeStyle = 'rgba(255,196,110,.55)'; ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(tx, ty); ctx.stroke();
+      const bx = Math.cos(a) * d, by = Math.sin(a) * d * 0.8;
+      const tx = Math.cos(a) * r * 0.8, ty = Math.sin(a) * r * 0.8;
+      ctx.strokeStyle = 'rgba(255,196,110,.6)'; ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(tx, ty); ctx.stroke();
       ctx.fillStyle = '#cfd8e6'; ctx.fillRect(bx - 1.5, by - 1.5, 3, 3);
-      if (Math.random() < 6 * dt) spawn(tx, ty, 1, 60, ['#ffd08a', '#ff9a4a', '#8d8579'], 0.5, 1.6);
+      if (Math.random() < 6 * dt) spawn(lastPos.x + tx, lastPos.y + ty, 1, 60, ['#ffd08a', '#ff9a4a', '#8d8579'], 0.5, 1.6);
     }
   }
 
+  /* ---- Erdexplosion: bewusst maßlos übertrieben ---- */
+  function startBoom(res) {
+    const e = earth(), P = { x: e.x, y: e.y - e.r };           // Einschlagpunkt: Oberseite der Erde
+    const chunks = [];
+    for (let i = 0; i < 110; i++) {
+      // Bruchstück aus einem zufälligen Punkt der Erdkugel; innen glüht es wie Magma
+      const a = Math.random() * 6.2832, d = Math.sqrt(Math.random()) * e.r;
+      const x = e.x + Math.cos(a) * d, y = e.y + Math.sin(a) * d, k = d / e.r;
+      const color = k > 0.82 ? (Math.random() < 0.5 ? '#2f6aa8' : '#5d7a48') : k > 0.5 ? '#8a5a38' : k > 0.25 ? '#e0571c' : '#ffd24a';
+      const dir = Math.atan2(y - P.y, x - P.x) * 0.5 + Math.atan2(y - e.y, x - e.x) * 0.5;   // weg vom Einschlag und vom Zentrum
+      const sp = (200 + Math.random() * 900) * (e.r / 200);
+      const size = e.r * (0.05 + Math.random() * 0.13), n = 5 + (Math.random() * 3 | 0);
+      chunks.push({ x, y, vx: Math.cos(dir) * sp, vy: Math.sin(dir) * sp - 150, rot: Math.random() * 6, vr: (Math.random() - 0.5) * 12,
+                    color, poly: Array.from({ length: n }, (_, j) => { const aa = j / n * 6.2832, rr = size * (0.6 + Math.random() * 0.6); return [Math.cos(aa) * rr, Math.sin(aa) * rr]; }) });
+    }
+    boom = { t: 0, e, P, chunks, bursts: [], nextBurst: 0, quip: pick(BOOM_QUIPS), what: label(res) };
+    spawn(P.x, P.y, 700, 1100, ['#fff3c4', '#ffb02e', '#ff6a1a', '#7a2a10', '#d9d2c4'], 3.4, 4);
+    [[0, 1.4, '255,230,170'], [0.12, 1.8, '255,140,60'], [0.3, 2.3, '255,255,255'], [0.55, 2.8, '255,90,40']].forEach(([delay, s, col], i) =>
+      setTimeout(() => rings.push({ x: P.x, y: P.y, r: Math.max(W, H) * s * 0.55, life: 1.8 + i * 0.3, col, sq: 0.8 }), delay * 1000));
+    flash = 1.5; shake = 80;
+  }
+
+  function drawBoom(dt) {
+    const b = boom; b.t += dt; const e = b.e;
+    // Feuerball
+    if (b.t < 2.6) {
+      const k = b.t / 2.6, rad = e.r * (0.5 + 2.2 * (1 - Math.exp(-b.t * 2.2)));
+      const g = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, rad);
+      g.addColorStop(0, `rgba(255,255,235,${1 - k})`); g.addColorStop(0.3, `rgba(255,214,90,${0.9 * (1 - k)})`);
+      g.addColorStop(0.65, `rgba(255,110,30,${0.7 * (1 - k)})`); g.addColorStop(1, 'rgba(120,20,0,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(e.x, e.y, rad, 0, 6.2832); ctx.fill();
+    }
+    // Erdbrocken fliegen davon
+    b.chunks.forEach((c) => {
+      c.x += c.vx * dt; c.y += c.vy * dt; c.vx *= Math.exp(-0.45 * dt); c.vy *= Math.exp(-0.45 * dt); c.rot += c.vr * dt;
+      ctx.save(); ctx.globalAlpha = Math.max(0, Math.min(1, (4.6 - b.t) / 1.4)); ctx.translate(c.x, c.y); ctx.rotate(c.rot);
+      ctx.beginPath(); c.poly.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); ctx.closePath();
+      ctx.fillStyle = c.color; ctx.fill(); ctx.strokeStyle = 'rgba(255,230,180,.35)'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.restore();
+    });
+    // 💥-Emojis ploppen überall auf
+    if (b.t < 1.8 && b.t >= b.nextBurst) {
+      b.nextBurst = b.t + 0.07;
+      b.bursts.push({ x: e.x + (Math.random() - 0.5) * W * 0.9, y: e.y - Math.random() * H * 0.75, s: 50 + Math.random() * 130, t0: b.t, rot: (Math.random() - 0.5) * 0.8 });
+    }
+    b.bursts.forEach((q) => {
+      const k = (b.t - q.t0) / 0.8; if (k > 1) return;
+      ctx.save(); ctx.globalAlpha = 1 - k; ctx.translate(q.x, q.y); ctx.rotate(q.rot); ctx.font = `${Math.round(q.s * (0.5 + k))}px ${EMOJI_FONT}`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('💥', 0, 0); ctx.restore();
+    });
+    // Riesiges "BUMM!" und der Spruch dazu
+    if (b.t < 4.4) {
+      const a = Math.max(0, Math.min(1, (4.4 - b.t) / 0.8)), pop = 1 + Math.max(0, 0.6 - b.t) * 2.5;
+      ctx.save(); ctx.globalAlpha = a; ctx.translate(W / 2, H * 0.34); ctx.rotate(-0.06 + Math.sin(b.t * 30) * 0.01 * Math.max(0, 1 - b.t)); ctx.scale(pop, pop);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = `900 ${Math.round(Math.min(H * 0.2, W * 0.2))}px Impact, "Arial Black", sans-serif`;
+      ctx.lineWidth = 12; ctx.strokeStyle = '#2a0d02'; ctx.lineJoin = 'round'; ctx.strokeText('BUMM!', 0, 0);
+      ctx.fillStyle = '#ffb02e'; ctx.fillText('BUMM!', 0, 0);
+      ctx.font = `600 ${Math.round(Math.max(15, H * 0.032))}px -apple-system, "Segoe UI", sans-serif`;
+      ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(0,0,0,.85)';
+      const l1 = `${b.what} trifft die Erde.`;
+      ctx.strokeText(l1, 0, H * 0.13); ctx.fillStyle = '#fff'; ctx.fillText(l1, 0, H * 0.13);
+      ctx.strokeText(b.quip, 0, H * 0.18); ctx.fillStyle = '#ffd9a0'; ctx.fillText(b.quip, 0, H * 0.18);
+      ctx.restore();
+    }
+    if (b.t > 4.6) { boom = null; earthT = 0; Sfx.play('reborn'); updateHud(); }
+  }
+
+  /** Zeichnet das ganze Bild. dt = echte Sekunden seit dem letzten Bild. */
   function render(dt) {
-    clock += dt; rot += dt * 0.2;
+    clock += dt; spawnT = Math.min(1, spawnT + dt / 0.6); earthT = Math.min(1, earthT + dt / 1.8);
     ctx.save();
-    // Wackeln beim Einschlag
-    if (shake > 0.1) { ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake); shake *= Math.pow(0.02, dt); }
-    ctx.fillStyle = '#04060b'; ctx.fillRect(-20, -20, W + 40, H + 40);
-    drawStars(clock); drawEarth();
+    if (shake > 0.1) { ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake); shake *= Math.pow(0.05, dt); }
+    ctx.fillStyle = '#04060b'; ctx.fillRect(-100, -100, W + 200, H + 200);
+    drawStars(clock);
+    const e = earth();
+    if (!boom) {
+      const ease = 1 - Math.pow(1 - earthT, 3);                 // neue Erde "poppt" sanft auf
+      drawEarth(e, ease, 0.55 + 0.45 * ease);
+    }
 
     const m = S.meteor, fight = S.phase === 'fight';
-    // Fortschritt des Anflugs 0 (fern) .. 1 (Einschlag)
-    const p = fight ? 1 - Math.max(0, m.timeLeft) / m.time : 0;
-    const e = earth();
-    const sx = W * 0.5 + 40, sy = H * 0.08, ex = W * 0.5, ey = e.y - e.r - 10;
-    const pe = Math.pow(p, 1.25);                          // fast gleichmäßig: man sieht ihn wirklich kommen
-    const mass = fight ? Math.max(0, m.remaining) / m.mass : 1;
-    const baseR = 14 + (Math.min(W, H) * 0.24 - 14) * pe;   // wächst deutlich, je näher er kommt
-    const r = baseR * (0.12 + 0.88 * Math.sqrt(mass));       // schrumpft sichtbar mit dem Abbau
-    const x = sx + (ex - sx) * pe, y = sy + (ey - sy) * pe + Math.sin(clock * 0.6) * (fight ? 0 : 3);
-    meteorPos = { x, y, r }; lastMass = mass;
-    if (r > 1.5) {
-      drawRock(x, y, r, m.n * 31 + 5, mass, !fight, fight ? Math.max(0, (p - 0.55) / 0.45) : 0);
-      if (fight) {
-        drawBots(x, y, r, dt);
-        // Aus dem Brocken lösen sich Trümmer: je höher der Abbau (relativ zur Masse), desto mehr
-        const frac = C.currentRate(S) / m.mass;                  // Anteil der Masse pro Sekunde
-        const perSec = Math.min(45, 3 + 500 * frac);
-        if (Math.random() < perSec * dt) {
-          const a = Math.random() * 6.2832;
-          parts.push({ x: x + Math.cos(a) * r * 0.9, y: y + Math.sin(a) * r * 0.9, vx: Math.cos(a) * (25 + Math.random() * 60),
-                       vy: Math.sin(a) * (25 + Math.random() * 60), life: 1.6, max: 1.6, c: '#7d756a', s: 2 + Math.random() * Math.max(1, r * 0.05) });
+    if (!boom) {
+      // Fortschritt des Anflugs 0 (fern) .. 1 (Einschlag). Bildgröße bleibt für alle Objekte gleich.
+      const p = fight ? 1 - Math.max(0, m.timeLeft) / m.time : 0;
+      const sx = W * 0.44, sy = H * 0.1, ex = e.x, ey = e.y - e.r - baseRadius() * 0.6;
+      const x = sx + (ex - sx) * p, y = sy + (ey - sy) * p + (fight ? 0 : Math.sin(clock * 0.8) * 4);
+      const mass = fight ? Math.max(0, m.remaining) / m.mass : 1;
+      const r = baseRadius() * (0.7 + 0.3 * p) * (0.15 + 0.85 * Math.sqrt(mass));   // wird nur wenig größer, schrumpft aber sichtbar beim Abbau
+      lastPos = { x, y, r };
+      const ang = Math.atan2(e.y - y, e.x - x), heat = fight ? Math.max(0, (p - 0.6) / 0.4) : 0;
+      if (r > 1.5) {
+        ctx.save(); ctx.translate(x, y); ctx.globalAlpha = fight ? spawnT : 0.55;
+        // Taumeln: jedes Objekt dreht sich mit eigener Geschwindigkeit/Richtung und wippt leicht
+        const spin = clock * (0.9 + (m.n % 4) * 0.35) * (m.n % 2 ? 1 : -1) + m.n;
+        drawTrail(r, ang, heat);
+        if (m.funny) drawEmoji(m.emoji, r, spin + Math.sin(clock * 3) * 0.2, heat);
+        else drawRock(r, m.n * 31 + 5, spin * 0.3, ang, heat);
+        if (fight) drawBots(r, dt);
+        ctx.restore();
+        if (fight) {
+          // Aus dem Objekt lösen sich Trümmer: je höher der Abbau (relativ zur Masse), desto mehr
+          const frac = C.currentRate(S) / m.mass, perSec = Math.min(45, 3 + 500 * frac);
+          if (Math.random() < perSec * dt) {
+            const a = Math.random() * 6.2832;
+            parts.push({ x: x + Math.cos(a) * r * 0.9, y: y + Math.sin(a) * r * 0.9, vx: Math.cos(a) * (25 + Math.random() * 60), vy: Math.sin(a) * (25 + Math.random() * 60),
+                         life: 1.6, max: 1.6, c: m.funny ? pick(['#ffd08a', '#c7b79a', '#e8e0d0']) : '#7d756a', s: 2 + Math.random() * Math.max(1, r * 0.05) });
+          }
         }
       }
-    }
+    } else drawBoom(dt);
+
     // Partikel
     for (let i = parts.length - 1; i >= 0; i--) {
       const q = parts[i]; q.life -= dt;
@@ -439,60 +563,56 @@
     ctx.globalAlpha = 1;
     // Druckwellen
     for (let i = rings.length - 1; i >= 0; i--) {
-      const g = rings[i]; g.t += dt; if (g.t > g.life) { rings.splice(i, 1); continue; }
+      const g = rings[i]; g.t = (g.t || 0) + dt; if (g.t > g.life) { rings.splice(i, 1); continue; }
       const k = g.t / g.life;
-      ctx.strokeStyle = `rgba(${g.col},${1 - k})`; ctx.lineWidth = 3 * (1 - k) + 1;
+      ctx.strokeStyle = `rgba(${g.col},${1 - k})`; ctx.lineWidth = 6 * (1 - k) + 1;
       ctx.beginPath(); ctx.ellipse(g.x, g.y, g.r * k, g.r * k * g.sq, 0, 0, 6.2832); ctx.stroke();
     }
     // Blitz
-    if (flash > 0.01) { ctx.fillStyle = `rgba(255,240,215,${flash})`; ctx.fillRect(-20, -20, W + 40, H + 40); flash *= Math.pow(0.004, dt); }
+    if (flash > 0.01) { ctx.fillStyle = `rgba(255,244,222,${Math.min(1, flash)})`; ctx.fillRect(-100, -100, W + 200, H + 200); flash *= Math.pow(0.02, dt); }
     ctx.restore();
   }
 
-  /** Effekte für das Ende eines Meteoriten. */
-  function playEnd(res) {
-    const e = earth();
-    if (res.destroyed) {
-      // Zerstörung: Trümmerwolke am letzten Ort
-      spawn(meteorPos.x, meteorPos.y, 160, 280, ['#ffd9a0', '#ff9a4a', '#8d8579', '#cfc6b8'], 1.4, 2.6);
-      rings.push({ x: meteorPos.x, y: meteorPos.y, r: 140, life: 0.9, col: '255,220,170', sq: 1 });
-      flash = 0.25;
-    } else {
-      // Einschlag: Blitz, Druckwelle auf der Erde, Staub, Wackeln
-      const x = W * 0.5, y = e.y - e.r;
-      spawn(x, y, 260, 380, ['#ffe0b0', '#ff8a3a', '#5a4a3a', '#d9d2c4'], 2.0, 3.2);
-      rings.push({ x, y, r: Math.min(W, H) * 0.9, life: 1.6, col: '255,200,140', sq: 0.3 });
-      rings.push({ x, y, r: Math.min(W, H) * 0.5, life: 1.0, col: '255,255,255', sq: 0.3 });
-      flash = 0.9; shake = 18;
-    }
+  /** Effekte, wenn ein Objekt zerstört wurde (der Lauf geht gleich mit dem nächsten weiter). */
+  function playKill() {
+    const { x, y, r } = lastPos;
+    spawn(x, y, 140, 320, ['#ffd9a0', '#ff9a4a', '#8d8579', '#cfc6b8', '#ffffff'], 1.4, 2.6);
+    rings.push({ x, y, r: r * 4, life: 0.8, col: '255,220,170', sq: 1 });
+    flash = Math.max(flash, 0.18); spawnT = 0;
   }
 
   /* ------------------------------------------- 5. Hauptschleife & Eingaben */
   function doStart() {
-    if (C.startMeteor(S)) { updateHud(); updateShops(); save(); }
+    if (C.startMeteor(S)) { spawnT = 0; Sfx.play('start'); Sfx.humStart(); updateHud(); updateShops(); save(); }
   }
   function endFight(res) {
-    if (!res) return;
-    playEnd(res); showReport(); updateShops(); updateHud(); save();
-    if (res.destroyed && S.destroyed === 1) toast('Erster Meteorit zerstört – Iridium gefunden!');
+    if (res.destroyed) {
+      playKill(); addFeed(res); Sfx.play('kill');
+    } else {
+      startBoom(res); Sfx.humStop(); Sfx.play('boom');
+      showReport(); updateShops(); save();
+    }
     if (C.prestigeUnlocked(S) && S.meteorsSeen === C.CFG.prestigeUnlockAfter) toast('Prestige freigeschaltet');
+    updateHud();
   }
 
   $('btnStart').addEventListener('click', doStart);
   window.addEventListener('keydown', (e) => {
-    if (e.code === 'Enter' && S.phase === 'shop') { e.preventDefault(); doStart(); }
+    if (e.code === 'Enter' && S.phase === 'shop' && !boom) { e.preventDefault(); doStart(); }
   });
   document.querySelectorAll('[data-speed]').forEach((b) => b.addEventListener('click', () => {
     speed = +b.dataset.speed;
     document.querySelectorAll('[data-speed]').forEach((x) => x.classList.toggle('on', x === b));
   }));
+  $('btnSound').addEventListener('click', () => { Sfx.setMuted(!Sfx.isMuted()); setText($('btnSound'), Sfx.isMuted() ? 'Ton aus' : 'Ton an'); if (!Sfx.isMuted()) Sfx.play('buy'); });
+  setText($('btnSound'), Sfx.isMuted() ? 'Ton aus' : 'Ton an');
   $('btnReset').addEventListener('click', (e) => {
     confirmClick(e.currentTarget, () => {
       S = C.newState(); save(); showReport(); updateShops(); updateHud(); toast('Spielstand gelöscht');
     }, 'Wirklich löschen?');
   });
 
-  let last = performance.now(), uiTimer = 0;
+  let last = performance.now(), uiTimer = 0, lastWarn = -1, zapAcc = 0;
   function frame(now) {
     const real = Math.min(0.25, (now - last) / 1000); last = now;
     // Spiellogik in kleinen Schritten (max. 0,1 s), damit hohe Geschwindigkeit nichts überspringt
@@ -500,7 +620,15 @@
     while (left > 0 && S.phase === 'fight') {
       const step = Math.min(0.1, left); left -= step;
       const res = C.tick(S, step);
-      if (res) { endFight(res); break; }
+      if (res) { endFight(res); if (S.phase !== 'fight') break; }
+    }
+    if (S.phase === 'fight') {
+      // Warnpiepen in den letzten 5 Sekunden und Laserzischen passend zur Botzahl
+      const sec = Math.ceil(S.meteor.timeLeft);
+      if (sec <= 5 && sec !== lastWarn && S.meteor.remaining > 0) { lastWarn = sec; Sfx.play('warn'); }
+      if (sec > 5) lastWarn = -1;
+      zapAcc += real * Math.min(6, Math.sqrt(S.bots.reduce((a, b) => a + b, 0)) * 0.8);
+      if (zapAcc >= 1) { zapAcc = 0; Sfx.play('zap'); }
     }
     render(real);
     uiTimer += real;
@@ -513,5 +641,5 @@
   requestAnimationFrame(frame);
 
   // Zum Testen im Browser/Konsole erreichbar
-  window.__game = { get state() { return S; }, Core: C };
+  window.__game = { get state() { return S; }, Core: C, get boom() { return boom; } };
 })();

@@ -12,7 +12,7 @@
 
   <!-- ===== Kopfzeile: Ressourcen und Werkzeuge ===== -->
   <header id="top">
-    <div class="brand">FEDERGEWICHT<small>Planetare Abwehr</small></div>
+    <div class="brand">FEDERGEWICHT<small>Abteilung für herabfallende Dinge</small></div>
     <div class="resources">
       <div class="res" title="ΔM = zerstörte Masse. Damit kaufst du Bots und Upgrades.">
         <span class="lbl">ΔM</span><span id="rDm" class="val">0 kg</span><span id="rRate" class="sub"></span>
@@ -28,6 +28,7 @@
       <div class="seg" title="Spielgeschwindigkeit">
         <button data-speed="1" class="on">×1</button><button data-speed="2">×2</button><button data-speed="4">×4</button>
       </div>
+      <button id="btnSound" class="ghost" title="Ton an/aus">Ton an</button>
       <button id="btnReset" class="ghost" title="Spielstand löschen">Zurücksetzen</button>
     </div>
   </header>
@@ -44,7 +45,10 @@
           <div class="row"><span class="muted">Verbleibende Masse</span><b id="mRemain">–</b></div>
           <div class="bar"><i id="barMass"></i></div>
           <div class="row"><span class="muted">Abbaurate</span><b id="mRate">–</b></div>
+          <div class="row"><span class="muted">Dieser Lauf</span><b id="mRun">–</b></div>
+          <div class="row"><span class="muted">ΔM im Lauf</span><b id="mRunGain">–</b></div>
         </div>
+        <div id="feed"></div>
         <div class="card hud-right">
           <div class="row"><span class="muted">Einschlag in</span><b id="mTime" class="big">–</b></div>
           <div class="bar time"><i id="barTime"></i></div>
@@ -63,13 +67,13 @@
           <div class="hud-title"><span id="nName">–</span><span id="nClass" class="muted"></span></div>
           <div class="grid2">
             <span class="muted">Masse</span><b id="nMass">–</b>
-            <span class="muted">Zeit bis Einschlag</span><b id="nTime">–</b>
+            <span class="muted">Zeit pro Objekt</span><b id="nTime">–</b>
             <span class="muted">Nötige Abbaurate</span><b id="nNeed">–</b>
             <span class="muted">Deine Abbaurate</span><b id="nHave">–</b>
           </div>
           <div id="nForecast" class="forecast"></div>
-          <button id="btnStart" class="primary">Abbau starten<small>Enter</small></button>
-          <div class="hint">Kaufe vorher Bots und Upgrades im rechten Fenster.</div>
+          <button id="btnStart" class="primary">Lauf starten<small>Enter</small></button>
+          <div class="hint">Kaufe vorher Bots und Upgrades rechts. Die Objekte fallen dann nacheinander, bis eins durchkommt. Die Erde dankt für deine Mühe.</div>
         </div>
       </div>
     </section>
@@ -95,6 +99,7 @@
   <div id="toast" role="status"></div>
 
   <script src="core.js"></script>
+  <script src="sfx.js"></script>
   <script src="ui.js"></script>
 </body>
 </html>

@@ -143,3 +143,10 @@ main { flex: 1; display: flex; min-height: 0; }
 
 /* Bestätigungsmodus der Zwei-Klick-Knöpfe (Prestige, Zurücksetzen) */
 .armed { border-color: var(--bad) !important; color: #f0b3aa !important; }
+
+/* Zerstört-Meldungen unten links (blenden sich nach ein paar Sekunden aus) */
+#feed { position: absolute; left: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 6px; pointer-events: none; max-width: 340px; }
+#feed div { background: rgba(12, 15, 21, .82); border: 1px solid var(--line); border-left: 3px solid var(--ok); border-radius: 4px; padding: 6px 10px; font-size: 13px; animation: feedlife 5s forwards; }
+#feed small { display: block; color: var(--muted); font-size: 11px; }
+@keyframes feedlife { 0% { opacity: 0; transform: translateX(-12px); } 6% { opacity: 1; transform: none; } 80% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { #feed div { animation-duration: 5s; } }

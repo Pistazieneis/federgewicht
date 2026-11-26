@@ -23,43 +23,52 @@
     botCostGrowth: 1.15,     // jeder gekaufte Bot macht den nächsten 15 % teurer
     prestigeUnlockAfter: 5,  // Prestige ab dem 5. abgehandelten Meteoriten
     prestigeBase: 1e9,       // FP = floor(sqrt(gesamtΔM / prestigeBase))
-    fpBonusPerPoint: 0.10,   // jeder verdiente FP gibt +10 % Abbau (dauerhaft)
-    saveKey: 'federgewicht.save.v2'
+    fpBonusPerPoint: 0.30,   // jeder verdiente FP gibt +30 % Abbau (dauerhaft)
+    saveKey: 'federgewicht.save.v3'
   };
 
   /* ---------------------------------------------------------- Objektklassen
-     Jede Klasse hat eine Start-Masse (mass), ein sanftes Wachstum pro Stufe
-     (growth) und eine Anzahl Stufen (count). Zwischen zwei Klassen liegt ein
-     großer Massensprung -> dort entsteht eine "Wand", die man erst mit mehr
-     Prestige-Bonus überwindet. Weitere Klassen (Planeten, Sterne, Galaxien ...)
-     lassen sich später einfach unten anhängen. Die letzte Klasse läuft endlos. */
+     Die Objekte fallen nacheinander auf die Erde (Stufe 1, 2, 3 ...), aufsteigend nach Masse.
+     Zuerst kommen lustige Alltagsgegenstände (explizite Liste mit Emoji), danach ernste
+     Himmelskörper, die aus Start-Masse (mass), Wachstum pro Stufe (growth) und Anzahl (count)
+     erzeugt werden. Zwischen den Klassen liegen große Massensprünge -> dort entsteht die
+     "Wand", die man erst mit mehr Prestige-Bonus überwindet. Weitere Klassen (Planeten, Sterne,
+     Galaxien ...) lassen sich unten anhängen. Die letzte Klasse läuft endlos weiter. */
   const CLASSES = [
-    { name: 'Meteoroid',        mass: 100,    growth: 1.45, count: 8 },
-    { name: 'Meteorit',         mass: 6e4,    growth: 1.45, count: 8 },
-    { name: 'Asteroid',         mass: 3e7,    growth: 1.45, count: 8 },
-    { name: 'Großer Asteroid',  mass: 1.5e10, growth: 1.45, count: 8 },
-    { name: 'Zwergplanet',      mass: 8e12,   growth: 1.45, count: Infinity }
+    { name: 'Alltag', funny: true, items: [
+      ['Fahrrad', '🚲', 15],        ['Sofa', '🛋️', 70],           ['Motorrad', '🏍️', 220],
+      ['Klavier', '🎹', 400],       ['Pferd', '🐎', 550],          ['Kleinwagen', '🚗', 1200],
+      ['Elefant', '🐘', 5000],      ['Schulbus', '🚌', 12000],     ['Lokomotive', '🚂', 8e4],
+      ['Blauwal', '🐋', 1.5e5],     ['Jumbojet', '✈️', 4e5],       ['Eiffelturm', '🗼', 1e7],
+      ['Kreuzfahrtschiff', '🚢', 1e8], ['Empire State Building', '🏢', 3.65e8], ['Cheops-Pyramide', '🔺', 5.9e9]
+    ] },
+    { name: 'Kleiner Asteroid', mass: 3e11,  growth: 1.5, count: 8 },
+    { name: 'Asteroid',         mass: 2e14,  growth: 1.5, count: 8 },
+    { name: 'Großer Asteroid',  mass: 1e17,  growth: 1.5, count: 8 },
+    { name: 'Zwergplanet',      mass: 5e20,  growth: 1.5, count: Infinity }
   ];
-  /** Liefert Klasse, Position in der Klasse und Masse für die Stufe n (ab 1). */
+  /** Liefert Name, Emoji (nur Alltag), Klasse, Position in der Klasse und Masse für die Stufe n (ab 1). */
   function levelInfo(n) {
     let left = n - 1;
     for (let c = 0; c < CLASSES.length; c++) {
-      const k = CLASSES[c];
-      if (left < k.count || c === CLASSES.length - 1)
-        return { cls: k.name, classIndex: c, pos: left + 1, count: k.count, mass: k.mass * Math.pow(k.growth, left) };
-      left -= k.count;
+      const k = CLASSES[c], count = k.items ? k.items.length : k.count;
+      if (left < count || c === CLASSES.length - 1) {
+        if (k.items) { const it = k.items[left]; return { cls: k.name, classIndex: c, pos: left + 1, count, mass: it[2], name: it[0], emoji: it[1], funny: true }; }
+        return { cls: k.name, classIndex: c, pos: left + 1, count, mass: k.mass * Math.pow(k.growth, left), name: null, emoji: null, funny: false };
+      }
+      left -= count;
     }
   }
 
   /* ------------------------------------------------------------------- Bots
      base = Abbau in kg pro Sekunde und Bot, cost = Grundpreis in kg ΔM. */
   const BOTS = [
-    { id: 'drone',   name: 'Mikro-Bohrdrohne',        base: 0.4,   cost: 5,    desc: 'Löst Gesteinsstaub mit rotierenden Bohrköpfen.' },
-    { id: 'crawler', name: 'Schürfroboter',           base: 1.5,   cost: 100,  desc: 'Kettenfahrzeug, das sich in die Oberfläche gräbt.' },
-    { id: 'laser',   name: 'Laser-Abbauplattform',    base: 12,    cost: 1500, desc: 'Verdampft Material mit gebündelten Hochleistungslasern.' },
-    { id: 'fusion',  name: 'Fusionsbohrer',           base: 105,   cost: 25e3, desc: 'Plasmabohrer mit eigenem Fusionsreaktor.' },
-    { id: 'plasma',  name: 'Plasma-Schneidflotte',    base: 900,   cost: 4e5,  desc: 'Orbitale Flotte, die Brocken heraustrennt.' },
-    { id: 'anti',    name: 'Antimaterie-Kollektor',   base: 7800,  cost: 7e6,  desc: 'Wandelt Gestein direkt in Energie um.' }
+    { id: 'drone',   name: 'Mikro-Bohrdrohne',        base: 0.2,   cost: 5,    desc: 'Löst Gesteinsstaub mit rotierenden Bohrköpfen.' },
+    { id: 'crawler', name: 'Schürfroboter',           base: 0.75,  cost: 100,  desc: 'Kettenfahrzeug, das sich in die Oberfläche gräbt.' },
+    { id: 'laser',   name: 'Laser-Abbauplattform',    base: 6,     cost: 1500, desc: 'Verdampft Material mit gebündelten Hochleistungslasern.' },
+    { id: 'fusion',  name: 'Fusionsbohrer',           base: 52,    cost: 25e3, desc: 'Plasmabohrer mit eigenem Fusionsreaktor.' },
+    { id: 'plasma',  name: 'Plasma-Schneidflotte',    base: 450,   cost: 4e5,  desc: 'Orbitale Flotte, die Brocken heraustrennt.' },
+    { id: 'anti',    name: 'Antimaterie-Kollektor',   base: 3900,  cost: 7e6,  desc: 'Wandelt Gestein direkt in Energie um.' }
   ];
 
   /* --------------------------------------------------------- Upgrades (ΔM)
@@ -160,7 +169,7 @@
   /* -------------------------------------------------------------- Zustand */
   function newState() {
     const s = {
-      v: 2,
+      v: 3,
       dm: CFG.startDm,            // aktuelles ΔM (ausgebbar)
       totalDm: 0,                 // insgesamt je gewonnenes ΔM  -> Grundlage fürs Prestige
       bots: BOTS.map(() => 0),    // Anzahl je Bot-Typ
@@ -170,27 +179,28 @@
       iridium: 0,
       fp: 0,                      // ausgebbare Forschungspunkte
       fpEarned: 0,                // insgesamt verdiente FP (bestimmt den Dauerbonus)
-      meteorN: 1,                 // Stufe (Masse) des nächsten Meteoriten in diesem Durchlauf
+      meteorN: 1,                 // Stufe (Objekt) des aktuellen/nächsten Meteoriten im Lauf
+      run: { kills: 0, gain: 0, iridium: 0 },   // Zwischenstand des laufenden Laufs
       meteorsSeen: 0,             // abgehandelte Meteoriten insgesamt (schaltet Prestige frei)
       destroyed: 0, impacts: 0, prestiges: 0,
       bestLevel: 0,               // höchste je zerstörte Stufe (Rekord, bleibt über Prestige)
-      phase: 'shop',              // 'shop' = Upgrade-Fenster, 'fight' = Meteorit im Anflug
+      phase: 'shop',              // 'shop' = Upgrade-Fenster (nur nach Einschlag), 'fight' = Lauf läuft
       meteor: null,
-      last: null                  // Ergebnis des letzten Meteoriten (für die Anzeige)
+      last: null                  // Ergebnis des letzten Laufs (für die Anzeige)
     };
     s.meteor = makeMeteor(s);
     return s;
   }
 
-  /** Erzeugt den nächsten Meteoriten. Die Masse hängt nur von s.meteorN ab (= Stufe).
-      Jeder zerstörte Meteorit erhöht die Stufe, jeder Einschlag setzt sie auf 1 zurück.
-      Dadurch kann man nie unlösbar festhängen: Stufe 1 ist immer schaffbar. */
+  /** Erzeugt das Objekt der aktuellen Stufe s.meteorN. Ein ganzer "Lauf" besteht aus Objekten,
+      die nacheinander einschlagen wollen (Stufe 1, 2, 3 ...), bis eines nicht rechtzeitig zerstört
+      wird. Danach beginnt der nächste Lauf wieder bei Stufe 1, mit allem, was man gekauft hat. */
   function makeMeteor(s) {
     const n = s.meteorN, info = levelInfo(n), mass = info.mass;
     const time = timeLimit(s);
     return { n, mass, remaining: mass, time, timeLeft: time, elapsed: 0,
-             name: designation(s.meteorsSeen + 1), cls: info.cls, classIndex: info.classIndex,
-             pos: info.pos, classCount: info.count };
+             name: info.name || designation(s.meteorsSeen + 1), emoji: info.emoji, funny: info.funny,
+             cls: info.cls, classIndex: info.classIndex, pos: info.pos, classCount: info.count };
   }
   function designation(n) { return `NEO 2026-${String(n).padStart(3, '0')}`; }
 
@@ -233,12 +243,17 @@
   }
 
   /* ------------------------------------------------------------- Aktionen */
-  /** Startet den Kampf. Sprengladungen (Spezial-Upgrade) wirken sofort. */
+  /** Sprengladungen (Spezial-Upgrade) sprengen beim Erscheinen jedes Objekts einen Teil weg. */
+  function arm(s) {
+    s.meteor.remaining -= s.meteor.mass * 0.03 * (s.special.charge || 0);
+  }
+  /** Startet einen Lauf (ab Stufe 1). Der Shop schließt sich bis zum nächsten Einschlag. */
   function startMeteor(s) {
     if (s.phase !== 'shop') return false;
+    s.meteorN = 1;
+    s.run = { kills: 0, gain: 0, iridium: 0 };
     s.meteor = makeMeteor(s);
-    const blast = 0.03 * (s.special.charge || 0);
-    s.meteor.remaining -= s.meteor.mass * blast;
+    arm(s);
     s.phase = 'fight';
     return true;
   }
@@ -253,28 +268,35 @@
     return checkEnd(s);
   }
 
-  /** Prüft, ob der Meteorit zerstört wurde oder eingeschlagen ist, und rechnet ab. */
+  /** Prüft, ob das Objekt zerstört wurde oder eingeschlagen ist, und rechnet ab.
+      Zerstört  -> sofort kommt das nächste, schwerere Objekt (kein Shop dazwischen).
+      Eingeschlagen -> Lauf zu Ende, Shop öffnet sich, nächster Lauf beginnt wieder bei Stufe 1. */
   function checkEnd(s) {
     const m = s.meteor;
     const dead = m.remaining <= 0;
     if (!dead && m.timeLeft > 0) return null;
-    const minedMass = m.mass - Math.max(0, m.remaining);       // zerstörte Masse = ΔM-Basis
+    const minedMass = Math.max(0, m.mass - Math.max(0, m.remaining));   // zerstörte Masse = ΔM-Basis
     const gain = minedMass * dmYield(s);
-    s.dm += gain; s.totalDm += gain;
+    s.dm += gain; s.totalDm += gain; s.run.gain += gain;
     let drop = 0;
-    if (dead) { s.destroyed++; drop = iridiumDrop(s, m.n); s.iridium += drop; }
+    if (dead) { s.destroyed++; s.run.kills++; drop = iridiumDrop(s, m.n); s.iridium += drop; s.run.iridium += drop; }
     else s.impacts++;
     s.meteorsSeen++;
-    s.last = { destroyed: dead, n: m.n, name: m.name, mass: m.mass, mined: minedMass, gain, iridium: drop,
-               fraction: minedMass / m.mass, best: s.bestLevel };
-    // Sieg: nächstschwerer Meteorit. Einschlag: zurück zum leichtesten (Stufe 1);
-    // Bots und Upgrades bleiben, man klettert also jedes Mal ein Stück höher.
-    const reached = m.n;
-    if (dead) { s.meteorN++; s.bestLevel = Math.max(s.bestLevel, s.meteorN - 1); }
-    else s.meteorN = 1;
-    s.phase = 'shop';
-    s.meteor = makeMeteor(s);          // Vorschau auf den nächsten Meteoriten
-    return s.last;
+    const res = { destroyed: dead, n: m.n, name: m.name, emoji: m.emoji, funny: m.funny, mass: m.mass, mined: minedMass, gain,
+                  iridium: drop, fraction: minedMass / m.mass };
+    if (dead) {
+      s.bestLevel = Math.max(s.bestLevel, m.n);
+      s.meteorN = m.n + 1;
+      s.meteor = makeMeteor(s); arm(s);          // direkt weiter mit dem nächsten Objekt
+    } else {
+      // Lauf-Zusammenfassung für den Ergebnisbericht
+      Object.assign(res, { run: Object.assign({}, s.run), best: s.bestLevel, bestName: levelInfo(Math.max(1, s.bestLevel)).name });
+      s.last = res;
+      s.phase = 'shop';
+      s.meteorN = 1;
+      s.meteor = makeMeteor(s);                  // Vorschau auf das erste Objekt des nächsten Laufs
+    }
+    return res;
   }
 
   function buyBot(s, i) {
@@ -334,7 +356,7 @@
   function deserialize(str) {
     try {
       const d = JSON.parse(str);
-      if (!d || d.v !== 2) return null;
+      if (!d || d.v !== 3) return null;
       const s = Object.assign(newState(), d);
       s.bots = BOTS.map((_, i) => d.bots[i] || 0);
       // Ein laufender Kampf wird beim Laden nicht fortgesetzt: neuer Meteorit im Upgrade-Fenster.
