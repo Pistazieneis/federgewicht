@@ -72,18 +72,18 @@ main { flex: 1; display: flex; min-height: 0; }
 .hud-title .muted { font-weight: 400; font-size: 12px; }
 
 /* HUD im Kampf */
-.hud-left  { position: absolute; left: 16px;  top: 16px; width: 290px; }
-.hud-right { position: absolute; right: 16px; top: 16px; width: 250px; }
+.hud-left  { position: absolute; left: 16px;  top: 16px; width: 265px; }
+.hud-right { position: absolute; right: 16px; top: 16px; width: 225px; }
 .bar { height: 6px; background: #1b222d; border-radius: 3px; overflow: hidden; margin: 6px 0 8px; }
 .bar i { display: block; height: 100%; width: 100%; background: var(--dm); transition: width .15s linear; }
 .bar.time i { background: var(--ok); }
 /* Upgrade-Fenster */
-.report { position: absolute; left: 16px; top: 16px; width: 330px; }
+.report { position: absolute; left: 16px; top: 16px; width: 290px; }
 .rep-head { font-weight: 700; letter-spacing: .05em; margin-bottom: 8px; }
 .rep-head.good { color: var(--ok); }
 .rep-head.bad  { color: var(--bad); }
 .rep-body { display: grid; grid-template-columns: 1fr auto; gap: 3px 16px; }
-.next { position: absolute; right: 16px; top: 16px; width: 310px; }
+.next { position: absolute; right: 16px; top: 16px; width: 280px; }
 .grid2 { display: grid; grid-template-columns: 1fr auto; gap: 4px 16px; }
 .forecast { margin: 10px 0 12px; padding: 7px 9px; border-radius: 4px; background: #161c26; font-size: 13px; }
 .forecast.good { border-left: 3px solid var(--ok); }

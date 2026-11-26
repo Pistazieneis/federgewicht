@@ -57,6 +57,13 @@ const Sfx = (function () {
     s.connect(f); f.connect(g); g.connect(master); s.start(t0, Math.random()); s.stop(t0 + dur + 0.05);
   }
 
+  /** Ein einzelner Klingelton (Grundton + Oberton, metallisch kurz). */
+  function ring(delay) {
+    tone(2350, 0.55, 'sine', 0.22, 0, delay);
+    tone(3520, 0.40, 'sine', 0.14, 0, delay);
+    tone(4700, 0.18, 'triangle', 0.05, 0, delay);
+  }
+
   const sounds = {
     // Kaufen: zwei schnelle Pieptöne
     buy:     () => { tone(520, 0.08, 'triangle', 0.25); tone(780, 0.12, 'triangle', 0.25, 0, 0.07); },
@@ -80,6 +87,10 @@ const Sfx = (function () {
       noise(2.0, 0.35, 600, 60, 1.8);                             // Nachbeben
       [0, 0.18, 0.4].forEach((d) => tone(2200 + Math.random() * 900, 0.5, 'sine', 0.06, 700, 1.4 + d));   // klirrende Splitter
     },
+    // Fahrradklingel: heller "Ring" aus zwei Obertönen mit schnellem Ausklingen; einmal beim Abbau ...
+    bell:     () => ring(0),
+    // ... und dreimal "ring-ring-ring", wenn das Fahrrad zerstört ist
+    bellKill: () => { ring(0); ring(0.15); ring(0.30); },
     // Prestige: festlicher Akkord
     prestige: () => { [262, 330, 392, 523, 659].forEach((f, i) => tone(f, 0.9, 'triangle', 0.2, 0, i * 0.09)); },
     // Neue Erde erscheint: sanftes Aufglimmen

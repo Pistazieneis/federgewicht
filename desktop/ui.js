@@ -302,8 +302,6 @@
 
   const R = rng(7);
   const stars = Array.from({ length: 220 }, () => ({ x: R(), y: R() * 0.95, r: R() * 1.2 + 0.2, a: R() * 0.6 + 0.3, ph: R() * 6.28 }));
-  // Kontinente als Flecken auf der Erdkugel: Winkel, Abstand vom Mittelpunkt, Größe (alles relativ zum Erdradius)
-  const lands = Array.from({ length: 10 }, () => ({ a: R() * 6.28, d: R() * 0.72, r: R() * 0.2 + 0.08, rot: R() * 3 }));
 
   // Gestalt eines Gesteinsbrockens: unregelmäßiges Vieleck + Krater, aus der Nummer erzeugt
   const shapeCache = {};
@@ -337,37 +335,89 @@
     }
   }
 
-  /** Lage und Größe der Erde: komplett sichtbar am unteren Rand (damit sie schön explodieren kann). */
+  /** Lage und Größe der Erde im "Totale"-Bild (komplett sichtbar am unteren Rand). Wird für die Explosion benutzt. */
   function earth() { const r = Math.min(H * 0.21, W * 0.3); return { x: W * 0.5, y: H - r * 1.15, r }; }
-  /** Feste Bildgröße für ALLE Objekte (egal ob Fahrrad oder Asteroid), damit nichts wild herumzoomt. */
-  function baseRadius() { return Math.min(H * 0.1, W * 0.13); }
+  /** Bildradius des Objekts. Die Kamera folgt dem Objekt, es bleibt also immer gleich groß im Bild. */
+  function baseRadius() { return Math.min(H * 0.22, W * 0.2); }
 
-  function drawEarth(e, alpha, scale) {
-    ctx.save(); ctx.globalAlpha = alpha; ctx.translate(e.x, e.y); ctx.scale(scale, scale); ctx.translate(-e.x, -e.y);
+  /* ---- Die Erde: echte Kontinent-Umrisse (grob, als [Längengrad, Breitengrad]) auf eine drehende Kugel projiziert ---- */
+  const CONTINENTS = [
+    { c: '#5f8f4a', p: [[-168,66],[-150,71],[-125,72],[-95,73],[-80,68],[-62,58],[-55,50],[-67,45],[-76,38],[-81,30],[-80,25],[-90,29],[-97,26],[-97,20],[-88,16],[-83,10],[-78,8],[-86,12],[-93,16],[-105,20],[-112,28],[-118,34],[-124,42],[-125,50],[-135,58],[-150,60],[-165,62]] },   // Nordamerika
+    { c: '#3f8040', p: [[-78,8],[-72,12],[-62,10],[-52,5],[-50,0],[-35,-6],[-39,-15],[-48,-26],[-58,-38],[-65,-42],[-68,-52],[-72,-54],[-75,-45],[-73,-30],[-70,-18],[-76,-12],[-81,-5],[-79,2]] },                                                                                    // Südamerika
+    { c: '#eef3f6', p: [[-73,78],[-55,83],[-25,83],[-20,72],[-40,62],[-50,64],[-60,70]] },                                                                                                                                                                                                    // Grönland
+    { c: '#6c9650', p: [[-10,36],[-9,43],[-2,48],[-5,52],[5,53],[8,57],[12,55],[20,60],[25,65],[30,70],[45,68],[70,73],[100,77],[130,72],[160,70],[180,68],[180,62],[160,58],[142,53],[135,44],[125,38],[122,30],[110,20],[106,10],[100,2],[98,9],[92,20],[80,15],[77,8],[72,20],[66,25],[57,25],[50,30],[44,13],[35,28],[36,36],[28,36],[20,40],[15,38],[12,44],[3,43],[-5,36]] }, // Eurasien
+    { c: '#b8a05c', p: [[-17,21],[-10,30],[-5,36],[10,37],[20,33],[32,31],[35,28],[43,12],[51,12],[40,-5],[40,-15],[33,-26],[20,-35],[15,-28],[12,-15],[9,-1],[8,5],[-8,4],[-17,14]] },                                                                                        // Afrika
+    { c: '#c98a52', p: [[114,-22],[122,-18],[131,-12],[137,-12],[142,-11],[146,-19],[153,-26],[150,-37],[140,-38],[130,-32],[115,-34]] },                                                                                                                                                      // Australien
+    { c: '#5f8f4a', p: [[-6,50],[2,51],[-2,58],[-6,56]] },                                                                                                                                                                                                                                     // Großbritannien
+    { c: '#6c9650', p: [[130,31],[141,36],[142,44],[140,41],[132,34]] },                                                                                                                                                                                                                       // Japan
+    { c: '#3f8040', p: [[95,5],[106,-6],[115,-8],[120,-2],[108,3]] }                                                                                                                                                                                                                          // Indonesien
+  ];
+  const TILT = 0.4;          // Neigung der Erdachse
+  /** Punkt (Längengrad, Breitengrad) -> Position auf der Kugelscheibe. z>0 heißt: Vorderseite sichtbar. */
+  function project(lon, lat, lon0) {
+    const lo = (lon - lon0) * Math.PI / 180, la = lat * Math.PI / 180;
+    const x = Math.cos(la) * Math.sin(lo), y0 = Math.sin(la), z0 = Math.cos(la) * Math.cos(lo);
+    const y = y0 * Math.cos(TILT) - z0 * Math.sin(TILT), z = y0 * Math.sin(TILT) + z0 * Math.cos(TILT);
+    return { x, y, z };
+  }
+  const cloudSeeds = Array.from({ length: 16 }, () => ({ lon: R() * 360 - 180, lat: R() * 140 - 70, w: 0.1 + R() * 0.16, sp: 0.8 + R() * 0.8 }));
+
+  function drawEarth(e, alpha) {
+    ctx.save(); ctx.globalAlpha = alpha;
     // Atmosphärenschein
-    let g = ctx.createRadialGradient(e.x, e.y, e.r * 0.97, e.x, e.y, e.r * 1.14);
-    g.addColorStop(0, 'rgba(110,170,255,.55)'); g.addColorStop(1, 'rgba(110,170,255,0)');
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(e.x, e.y, e.r * 1.14, 0, 6.2832); ctx.fill();
+    let g = ctx.createRadialGradient(e.x, e.y, e.r * 0.98, e.x, e.y, e.r * 1.12);
+    g.addColorStop(0, 'rgba(120,180,255,.6)'); g.addColorStop(1, 'rgba(120,180,255,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(e.x, e.y, e.r * 1.12, 0, 6.2832); ctx.fill();
     // Ozean
-    g = ctx.createRadialGradient(e.x - e.r * 0.35, e.y - e.r * 0.4, e.r * 0.2, e.x, e.y, e.r);
-    g.addColorStop(0, '#3a7bc0'); g.addColorStop(0.6, '#1a4678'); g.addColorStop(1, '#0a1c33');
+    g = ctx.createRadialGradient(e.x - e.r * 0.35, e.y - e.r * 0.4, e.r * 0.1, e.x, e.y, e.r);
+    g.addColorStop(0, '#3b86cf'); g.addColorStop(0.55, '#1c4f8a'); g.addColorStop(1, '#0b2442');
     ctx.fillStyle = g; ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, 6.2832); ctx.fill();
-    // Landmassen und Wolken (innerhalb der Kugel zugeschnitten), drehen sich langsam
+
     ctx.save(); ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, 6.2832); ctx.clip();
-    const spin = clock * 0.03;
-    lands.forEach((l, i) => {
-      const a = l.a + spin;
-      ctx.fillStyle = i % 3 === 0 ? 'rgba(92,120,72,.85)' : 'rgba(120,108,72,.8)';
-      ctx.beginPath(); ctx.ellipse(e.x + Math.cos(a) * l.d * e.r, e.y + Math.sin(a) * l.d * e.r, l.r * e.r * 1.3, l.r * e.r * 0.7, l.rot + spin, 0, 6.2832); ctx.fill();
+    const lon0 = clock * 4;                                     // Erde dreht sich (Grad pro Sekunde)
+    // Kontinente: jede Kante wird in kleine Schritte zerlegt, damit sie auf der Kugel schön rund wirken.
+    // Punkte auf der Rückseite werden an den Rand geklemmt, so bleibt die Form am Horizont geschlossen.
+    CONTINENTS.forEach((k) => {
+      const pts = []; let front = 0;
+      for (let i = 0; i < k.p.length; i++) {
+        const a = k.p[i], b = k.p[(i + 1) % k.p.length];
+        const n = Math.max(1, Math.ceil(Math.max(Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1])) / 5));
+        for (let s = 0; s < n; s++) {
+          const q = project(a[0] + (b[0] - a[0]) * s / n, a[1] + (b[1] - a[1]) * s / n, lon0);
+          if (q.z > 0) front++;
+          if (q.z < 0) { const h = Math.hypot(q.x, q.y) || 1; q.x /= h; q.y /= h; }
+          pts.push(q);
+        }
+      }
+      if (!front) return;
+      ctx.beginPath(); pts.forEach((q, i) => (i ? ctx.lineTo(e.x + q.x * e.r, e.y - q.y * e.r) : ctx.moveTo(e.x + q.x * e.r, e.y - q.y * e.r)));
+      ctx.closePath(); ctx.fillStyle = k.c; ctx.fill();
+      ctx.strokeStyle = 'rgba(15,35,20,.45)'; ctx.lineWidth = Math.max(1, e.r * 0.004); ctx.stroke();
     });
-    ctx.fillStyle = 'rgba(255,255,255,.1)';
-    for (let i = 0; i < 6; i++) { const l = lands[i], a = l.a * 2 - spin * 1.6; ctx.beginPath(); ctx.ellipse(e.x + Math.cos(a) * 0.5 * e.r, e.y + Math.sin(a) * 0.6 * e.r, e.r * 0.3, e.r * 0.04, l.rot, 0, 6.2832); ctx.fill(); }
-    // Schattenseite (Licht kommt von links oben)
+    // Nordpolkappe: weiche, perspektivisch verkürzte Ellipse am Pol (je flacher man draufschaut, desto flacher)
+    const pole = project(0, 90, 0);
+    if (pole.z > 0.02) {
+      ctx.save(); ctx.translate(e.x, e.y - pole.y * e.r); ctx.scale(1, pole.z);
+      const cg = ctx.createRadialGradient(0, 0, e.r * 0.05, 0, 0, e.r * 0.3);
+      cg.addColorStop(0, 'rgba(245,250,255,.95)'); cg.addColorStop(0.7, 'rgba(235,243,250,.85)'); cg.addColorStop(1, 'rgba(235,243,250,0)');
+      ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(0, 0, e.r * 0.3, 0, 6.2832); ctx.fill(); ctx.restore();
+    }
+    // Wolken, die langsamer/anders ziehen als die Erde
+    cloudSeeds.forEach((c) => {
+      const q = project(c.lon + clock * c.sp, c.lat, lon0 * 0.9);
+      if (q.z <= 0.05) return;
+      ctx.fillStyle = `rgba(255,255,255,${0.22 * Math.min(1, q.z * 2)})`;
+      ctx.beginPath(); ctx.ellipse(e.x + q.x * e.r, e.y - q.y * e.r, e.r * c.w * (0.4 + q.z * 0.6), e.r * c.w * 0.3 * (0.4 + q.z * 0.6), -q.x * 0.5, 0, 6.2832); ctx.fill();
+    });
+    // Kugelschattierung: Licht von links oben, Rand dunkler (Limb-Darkening)
+    g = ctx.createRadialGradient(e.x - e.r * 0.3, e.y - e.r * 0.35, e.r * 0.2, e.x, e.y, e.r * 1.02);
+    g.addColorStop(0, 'rgba(255,255,255,.08)'); g.addColorStop(0.65, 'rgba(0,0,10,0)'); g.addColorStop(1, 'rgba(0,0,12,.6)');
+    ctx.fillStyle = g; ctx.fillRect(e.x - e.r, e.y - e.r, e.r * 2, e.r * 2);
     g = ctx.createLinearGradient(e.x - e.r, e.y - e.r, e.x + e.r, e.y + e.r);
-    g.addColorStop(0.35, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,12,.7)');
+    g.addColorStop(0.45, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,12,.55)');
     ctx.fillStyle = g; ctx.fillRect(e.x - e.r, e.y - e.r, e.r * 2, e.r * 2);
     ctx.restore();
-    ctx.strokeStyle = 'rgba(150,200,255,.5)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, 6.2832); ctx.stroke();
+    ctx.strokeStyle = 'rgba(160,205,255,.55)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, 6.2832); ctx.stroke();
     ctx.restore();
   }
 
@@ -425,20 +475,50 @@
     ctx.restore();
   }
 
-  /** Bots: kleine Lichtpunkte umkreisen das Objekt und schießen Laser darauf. */
-  function drawBots(r, dt) {
-    const total = S.bots.reduce((a, b) => a + b, 0);
-    const n = Math.min(14, total === 0 ? 0 : Math.ceil(Math.sqrt(total) * 1.4));
-    ctx.lineWidth = 1;
-    for (let i = 0; i < n; i++) {
-      const a = clock * (0.5 + (i % 3) * 0.12) * (i % 2 ? 1 : -1) + i * 6.2832 / n;
-      const d = r * (1.35 + (i % 4) * 0.12);
-      const bx = Math.cos(a) * d, by = Math.sin(a) * d * 0.8;
-      const tx = Math.cos(a) * r * 0.8, ty = Math.sin(a) * r * 0.8;
-      ctx.strokeStyle = 'rgba(255,196,110,.6)'; ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(tx, ty); ctx.stroke();
-      ctx.fillStyle = '#cfd8e6'; ctx.fillRect(bx - 1.5, by - 1.5, 3, 3);
-      if (Math.random() < 6 * dt) spawn(lastPos.x + tx, lastPos.y + ty, 1, 60, ['#ffd08a', '#ff9a4a', '#8d8579'], 0.5, 1.6);
+  /** Bots als kleine Sprites, je nach Typ anders: sie schweben dicht um das Objekt und schneiden mit Strahlen hinein. */
+  const BOT_COLORS = ['#ffcf7a', '#ffa15a', '#ff5a5a', '#58b7ff', '#c283ff', '#6df5e1'];
+  function drawBot(i, x, y, s, a) {
+    ctx.save(); ctx.translate(x, y); ctx.rotate(a);
+    ctx.fillStyle = '#d5dde8'; ctx.strokeStyle = '#2a3342'; ctx.lineWidth = 1;
+    if (i === 0) {                                              // Drohne: Körper + vier Rotoren
+      ctx.beginPath(); ctx.arc(0, 0, s * 0.45, 0, 6.2832); ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = '#9fb0c8'; for (let k = 0; k < 4; k++) { const aa = k * 1.5708 + clock * 14; ctx.beginPath(); ctx.moveTo(Math.cos(aa) * s * 0.5, Math.sin(aa) * s * 0.5); ctx.lineTo(Math.cos(aa) * s, Math.sin(aa) * s); ctx.stroke(); }
+    } else if (i === 1) {                                       // Schürfroboter: Kasten mit Rädern
+      ctx.fillRect(-s * 0.8, -s * 0.45, s * 1.6, s * 0.9); ctx.strokeRect(-s * 0.8, -s * 0.45, s * 1.6, s * 0.9);
+      ctx.fillStyle = '#39445a'; ctx.beginPath(); ctx.arc(-s * 0.5, s * 0.45, s * 0.28, 0, 6.2832); ctx.arc(s * 0.5, s * 0.45, s * 0.28, 0, 6.2832); ctx.fill();
+    } else if (i === 2) {                                       // Laserplattform: Dreieck mit rotem Auge
+      ctx.beginPath(); ctx.moveTo(0, -s); ctx.lineTo(s * 0.9, s * 0.7); ctx.lineTo(-s * 0.9, s * 0.7); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#ff4a4a'; ctx.beginPath(); ctx.arc(0, s * 0.15, s * 0.22, 0, 6.2832); ctx.fill();
+    } else if (i === 3) {                                       // Fusionsbohrer: Sechseck, blau leuchtend
+      ctx.beginPath(); for (let k = 0; k < 6; k++) ctx.lineTo(Math.cos(k * 1.0472) * s, Math.sin(k * 1.0472) * s); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#58b7ff'; ctx.beginPath(); ctx.arc(0, 0, s * 0.4, 0, 6.2832); ctx.fill();
+    } else if (i === 4) {                                       // Plasma-Flotte: Raute
+      ctx.beginPath(); ctx.moveTo(0, -s * 1.1); ctx.lineTo(s * 0.8, 0); ctx.lineTo(0, s * 1.1); ctx.lineTo(-s * 0.8, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#c283ff'; ctx.beginPath(); ctx.arc(0, 0, s * 0.3, 0, 6.2832); ctx.fill();
+    } else {                                                    // Antimaterie: Ring
+      ctx.strokeStyle = '#6df5e1'; ctx.lineWidth = s * 0.3; ctx.beginPath(); ctx.arc(0, 0, s * 0.8, 0, 6.2832); ctx.stroke();
+      ctx.fillStyle = '#e8fffb'; ctx.beginPath(); ctx.arc(0, 0, s * 0.3, 0, 6.2832); ctx.fill();
     }
+    ctx.restore();
+  }
+  /** Zeichnet alle Bots (max. 18 Sprites, gewichtet nach Besitz) um das Objekt. Koordinaten relativ zur Objektmitte. */
+  function drawBots(r, dt) {
+    const list = [];
+    S.bots.forEach((c, i) => { const n = c > 0 ? Math.min(6, Math.max(1, Math.round(Math.sqrt(c)))) : 0; for (let k = 0; k < n; k++) list.push(i); });
+    const sprites = list.slice(-18), n = sprites.length;
+    const s = Math.max(5, Math.min(13, r * 0.07));
+    sprites.forEach((tier, idx) => {
+      const a = clock * (0.25 + (idx % 3) * 0.07) * (idx % 2 ? 1 : -1) + idx * 6.2832 / n;
+      const d = r * (1.12 + 0.05 * Math.sin(clock * 2 + idx));
+      const bx = Math.cos(a) * d, by = Math.sin(a) * d;
+      const tx = Math.cos(a) * r * 0.78, ty = Math.sin(a) * r * 0.78;      // Auftreffpunkt auf dem Objekt
+      const col = BOT_COLORS[tier], w = 1 + tier * 0.5;
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = col; ctx.globalAlpha *= 0.35; ctx.lineWidth = w * 3; ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(tx, ty); ctx.stroke();   // Schein
+      ctx.globalAlpha /= 0.35; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(tx, ty); ctx.stroke();                          // Strahl
+      drawBot(tier, bx, by, s, a + 1.5708);
+      if (Math.random() < (4 + tier) * dt) spawn(lastPos.x + tx, lastPos.y + ty, 2, 90, [col, '#ffffff', '#ffd08a'], 0.5, 2);
+    });
   }
 
   /* ---- Erdexplosion: bewusst maßlos übertrieben ---- */
@@ -509,45 +589,44 @@
     if (b.t > 4.6) { boom = null; earthT = 0; Sfx.play('reborn'); updateHud(); }
   }
 
-  /** Zeichnet das ganze Bild. dt = echte Sekunden seit dem letzten Bild. */
+  /** Zeichnet das ganze Bild. dt = echte Sekunden seit dem letzten Bild.
+      Kamera: Das Objekt bleibt groß in der Bildmitte, die Erde wächst von unten heran, bis sie es trifft. */
   function render(dt) {
     clock += dt; spawnT = Math.min(1, spawnT + dt / 0.6); earthT = Math.min(1, earthT + dt / 1.8);
     ctx.save();
     if (shake > 0.1) { ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake); shake *= Math.pow(0.05, dt); }
     ctx.fillStyle = '#04060b'; ctx.fillRect(-100, -100, W + 200, H + 200);
     drawStars(clock);
-    const e = earth();
-    if (!boom) {
-      const ease = 1 - Math.pow(1 - earthT, 3);                 // neue Erde "poppt" sanft auf
-      drawEarth(e, ease, 0.55 + 0.45 * ease);
-    }
 
     const m = S.meteor, fight = S.phase === 'fight';
     if (!boom) {
-      // Fortschritt des Anflugs 0 (fern) .. 1 (Einschlag). Bildgröße bleibt für alle Objekte gleich.
-      const p = fight ? 1 - Math.max(0, m.timeLeft) / m.time : 0;
-      const sx = W * 0.44, sy = H * 0.1, ex = e.x, ey = e.y - e.r - baseRadius() * 0.6;
-      const x = sx + (ex - sx) * p, y = sy + (ey - sy) * p + (fight ? 0 : Math.sin(clock * 0.8) * 4);
+      const p = fight ? 1 - Math.max(0, m.timeLeft) / m.time : 0;            // 0 = fern, 1 = Einschlag
+      const base = baseRadius(), ox = W * 0.5, oy = H * 0.4;
       const mass = fight ? Math.max(0, m.remaining) / m.mass : 1;
-      const r = baseRadius() * (0.7 + 0.3 * p) * (0.15 + 0.85 * Math.sqrt(mass));   // wird nur wenig größer, schrumpft aber sichtbar beim Abbau
+      const r = base * (0.9 + 0.1 * p) * (0.15 + 0.85 * Math.sqrt(mass));      // schrumpft sichtbar beim Abbau
+      // Erde: Oberkante steigt von unten bis kurz unter das Objekt, der Radius wächst dabei stark
+      const pe = Math.pow(p, 1.4), top = H * 0.9 + (oy + base * 0.62 - H * 0.9) * pe, re = H * 0.12 + (H * 1.6 - H * 0.12) * Math.pow(p, 2.2);
+      const ease = 1 - Math.pow(1 - earthT, 3);
+      drawEarth({ x: W * 0.5, y: top + re, r: re }, ease);
+      const x = ox, y = oy + (fight ? 0 : Math.sin(clock * 0.8) * 5);
       lastPos = { x, y, r };
-      const ang = Math.atan2(e.y - y, e.x - x), heat = fight ? Math.max(0, (p - 0.6) / 0.4) : 0;
+      const heat = fight ? Math.max(0, (p - 0.55) / 0.45) : 0;
       if (r > 1.5) {
-        ctx.save(); ctx.translate(x, y); ctx.globalAlpha = fight ? spawnT : 0.55;
+        ctx.save(); ctx.translate(x, y); ctx.globalAlpha = fight ? spawnT : 0.6;
         // Taumeln: jedes Objekt dreht sich mit eigener Geschwindigkeit/Richtung und wippt leicht
         const spin = clock * (0.9 + (m.n % 4) * 0.35) * (m.n % 2 ? 1 : -1) + m.n;
-        drawTrail(r, ang, heat);
+        drawTrail(r, Math.PI / 2, heat);                                      // Feuerschweif nach oben (es fällt nach unten)
         if (m.funny) drawEmoji(m.emoji, r, spin + Math.sin(clock * 3) * 0.2, heat);
-        else drawRock(r, m.n * 31 + 5, spin * 0.3, ang, heat);
+        else drawRock(r, m.n * 31 + 5, spin * 0.3, Math.PI / 2, heat);
         if (fight) drawBots(r, dt);
         ctx.restore();
         if (fight) {
           // Aus dem Objekt lösen sich Trümmer: je höher der Abbau (relativ zur Masse), desto mehr
-          const frac = C.currentRate(S) / m.mass, perSec = Math.min(45, 3 + 500 * frac);
+          const frac = C.currentRate(S) / m.mass, perSec = Math.min(60, 4 + 600 * frac);
           if (Math.random() < perSec * dt) {
             const a = Math.random() * 6.2832;
-            parts.push({ x: x + Math.cos(a) * r * 0.9, y: y + Math.sin(a) * r * 0.9, vx: Math.cos(a) * (25 + Math.random() * 60), vy: Math.sin(a) * (25 + Math.random() * 60),
-                         life: 1.6, max: 1.6, c: m.funny ? pick(['#ffd08a', '#c7b79a', '#e8e0d0']) : '#7d756a', s: 2 + Math.random() * Math.max(1, r * 0.05) });
+            parts.push({ x: x + Math.cos(a) * r * 0.9, y: y + Math.sin(a) * r * 0.9, vx: Math.cos(a) * (30 + Math.random() * 90), vy: Math.sin(a) * (30 + Math.random() * 90) + 20,
+                         life: 1.8, max: 1.8, c: m.funny ? pick(['#ffd08a', '#c7b79a', '#e8e0d0', '#9aa7b8']) : '#7d756a', s: 2 + Math.random() * Math.max(2, r * 0.045) });
           }
         }
       }
@@ -587,7 +666,7 @@
   }
   function endFight(res) {
     if (res.destroyed) {
-      playKill(); addFeed(res); Sfx.play('kill');
+      playKill(); addFeed(res); Sfx.play('kill'); if (res.n === 1) Sfx.play('bellKill');   // Fahrrad: Klingeln
     } else {
       startBoom(res); Sfx.humStop(); Sfx.play('boom');
       showReport(); updateShops(); save();
@@ -612,7 +691,7 @@
     }, 'Wirklich löschen?');
   });
 
-  let last = performance.now(), uiTimer = 0, lastWarn = -1, zapAcc = 0;
+  let last = performance.now(), uiTimer = 0, lastWarn = -1, zapAcc = 0, bellAcc = 0;
   function frame(now) {
     const real = Math.min(0.25, (now - last) / 1000); last = now;
     // Spiellogik in kleinen Schritten (max. 0,1 s), damit hohe Geschwindigkeit nichts überspringt
@@ -629,6 +708,8 @@
       if (sec > 5) lastWarn = -1;
       zapAcc += real * Math.min(6, Math.sqrt(S.bots.reduce((a, b) => a + b, 0)) * 0.8);
       if (zapAcc >= 1) { zapAcc = 0; Sfx.play('zap'); }
+      // Das Fahrrad klingelt, solange es abgebaut wird
+      if (S.meteor.n === 1 && C.baseRate(S) > 0) { bellAcc += real; if (bellAcc > 0.9) { bellAcc = -Math.random() * 0.6; Sfx.play('bell'); } }
     }
     render(real);
     uiTimer += real;
