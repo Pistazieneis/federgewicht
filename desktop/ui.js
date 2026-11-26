@@ -33,6 +33,17 @@
   function setText(el, txt) { if (el.textContent !== txt) el.textContent = txt; }
   const rate = (r) => C.fmtMass(r) + '/s';
 
+
+  /** Zwei-Klick-Bestätigung: Der erste Klick ändert nur die Beschriftung ("Wirklich?"),
+      erst der zweite Klick innerhalb von 4 s führt die Aktion aus. Ersetzt confirm(),
+      das in eingebetteten Browser-Seiten keinen Dialog zeigt. */
+  function confirmClick(btn, action, label) {
+    if (btn._armed) { clearTimeout(btn._t); btn._armed = false; btn.textContent = btn._orig; btn.classList.remove('armed'); action(); return; }
+    btn._orig = btn.textContent; btn._armed = true; btn.classList.add('armed');
+    btn.textContent = label;
+    btn._t = setTimeout(() => { btn._armed = false; btn.classList.remove('armed'); btn.textContent = btn._orig; }, 4000);
+  }
+
   /* ------------------------------------------------------------- 2. Shops */
   /** Baut ein Listenelement. 'buyLabel' ist der Beschriftungstext des Knopfes. */
   function makeItem(kind, id, withOwned) {
@@ -100,11 +111,13 @@
     if (ok) { updateShops(); updateHud(); }
   });
 
-  $('btnPrestige').addEventListener('click', () => {
+  $('btnPrestige').addEventListener('click', (e) => {
     const gain = C.prestigeGain(S);
     if (gain < 1) return;
-    if (!confirm(`Neustart durchführen?\n\nDu erhältst ${gain} Forschungspunkte (dauerhaft +${Math.round(gain * C.CFG.fpBonusPerPoint * 100)} % Abbau).\nBots, ΔM-Upgrades und Meteoritenstufe werden zurückgesetzt.`)) return;
-    if (C.prestige(S)) { toast(`+${gain} Forschung`); save(); updateShops(); updateHud(); }
+    // Erst beim zweiten Klick wird wirklich neu gestartet
+    confirmClick(e.currentTarget, () => {
+      if (C.prestige(S)) { toast(`+${gain} Forschung`); showReport(); save(); updateShops(); updateHud(); }
+    }, 'Sicher? Bots und Upgrades werden zurückgesetzt – nochmal klicken');
   });
 
   /** Aktualisiert Texte und Knopfzustände aller Shops (wird ~5x pro Sekunde aufgerufen). */
@@ -161,7 +174,7 @@
     setText($('pBonus'), '×' + C.prestigeMult(S).toFixed(2).replace('.', ','));
     setText($('pGain'), '+' + C.fmtNum(gain));
     setText($('pNext'), C.fmtMass(Math.pow(S.fpEarned + gain + 1, 2) * C.CFG.prestigeBase));
-    setText($('btnPrestige'), gain >= 1 ? `Neustart (+${C.fmtNum(gain)} Forschung)` : 'Noch keine Forschung verfügbar');
+    if (!$('btnPrestige')._armed) setText($('btnPrestige'), gain >= 1 ? `Neustart (+${C.fmtNum(gain)} Forschung)` : 'Noch keine Forschung verfügbar');
     $('btnPrestige').disabled = !shopOpen || gain < 1;
     C.FP_SHOP.forEach((d, i) => {
       const e = fpEls[i], q = e.q, l = S.fpUp[d.id] || 0, maxed = l >= d.max;
@@ -473,9 +486,10 @@
     speed = +b.dataset.speed;
     document.querySelectorAll('[data-speed]').forEach((x) => x.classList.toggle('on', x === b));
   }));
-  $('btnReset').addEventListener('click', () => {
-    if (!confirm('Spielstand wirklich komplett löschen?')) return;
-    S = C.newState(); save(); showReport(); updateShops(); updateHud(); toast('Spielstand gelöscht');
+  $('btnReset').addEventListener('click', (e) => {
+    confirmClick(e.currentTarget, () => {
+      S = C.newState(); save(); showReport(); updateShops(); updateHud(); toast('Spielstand gelöscht');
+    }, 'Wirklich löschen?');
   });
 
   let last = performance.now(), uiTimer = 0;

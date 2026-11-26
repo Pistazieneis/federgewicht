@@ -149,3 +149,6 @@ main { flex: 1; display: flex; min-height: 0; }
   #side { width: auto; height: 45%; border-left: 0; border-top: 1px solid var(--line); }
   .hud-left, .report { width: 240px; } .hud-right, .next { width: 240px; }
 }
+
+/* Bestätigungsmodus der Zwei-Klick-Knöpfe (Prestige, Zurücksetzen) */
+.armed { border-color: var(--bad) !important; color: #f0b3aa !important; }
