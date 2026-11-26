@@ -11,7 +11,6 @@
   "scripts": {
     "start": "electron .",
     "package:win": "electron-packager . Federgewicht --platform=win32 --arch=x64 --out=../dist --overwrite --prune=true",
-    "package:mac": "electron-packager . Federgewicht --platform=darwin --arch=x64,arm64 --out=../dist --overwrite --prune=true",
     "test": "node ../tools/sim.js 10"
   },
   "private": true

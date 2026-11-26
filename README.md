@@ -18,9 +18,11 @@ Baue Bots und Upgrades, die ihn abbauen, bevor er einschlägt.
 Bedienung: `Enter` = Abbau starten, `Shift+Klick` im Shop = bis zu 10 Käufe. Gekämpft wird komplett automatisch.
 
 ## Spielen
-Im Browser: `desktop/index.html` öffnen. Oder fertige Version unter **Releases** laden
-(Windows: `Federgewicht-Windows.zip`, macOS: `...-AppleSilicon.zip` bzw. `...-Intel.zip`).
-macOS: Beim ersten Start Rechtsklick auf die App -> Öffnen (die App ist nicht signiert).
+Unter **Releases** gibt es zwei Dateien:
+- `Federgewicht-Windows.zip`: entpacken, `Federgewicht.exe` starten.
+- `Federgewicht-Browser.html`: herunterladen und per Doppelklick im Browser öffnen (Windows, Mac, Linux).
+
+Direkt aus dem Repo: `desktop/index.html` im Browser öffnen.
 
 ## Selbst bauen (Node.js 20)
 ```
@@ -28,12 +30,11 @@ cd desktop
 npm install
 npm start               # Spiel direkt starten
 npm run package:win     # -> dist/Federgewicht-win32-x64
-npm run package:mac     # -> dist/Federgewicht-darwin-arm64 und -x64 (am besten auf einem Mac)
 ```
 
 ## Release veröffentlichen
 Tag setzen (`git tag v0.1.0 && git push --tags`) oder auf GitHub **Actions -> Build & Release -> Run workflow**
-mit Version eintragen. Der Workflow baut Windows und macOS und hängt alle Zips an ein Release.
+mit Version eintragen. Der Workflow baut die Windows-Version und die Browser-Datei und hängt beides an ein Release.
 
 ## Aufbau
 | Datei | Inhalt |
@@ -43,6 +44,7 @@ mit Version eintragen. Der Workflow baut Windows und macOS und hängt alle Zips 
 | `desktop/index.html`, `style.css` | Layout und Optik |
 | `desktop/main.js` | Electron-Fenster |
 | `tools/sim.js` | Balance-Simulation: `node tools/sim.js 40` |
+| `tools/build-browser.py` | Baut die Einzeldatei für die Browser-Version |
 
 ## Lizenz
 Proprietär, alle Rechte vorbehalten. Siehe `LICENSE`.

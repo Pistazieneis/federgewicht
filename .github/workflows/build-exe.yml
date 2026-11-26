@@ -1,6 +1,6 @@
-# Baut das Spiel für Windows (x64) und macOS (Intel + Apple Silicon) und legt es als Release ab.
+# Baut Windows (x64) und die Browser-Version und legt beides als Release ab.
 #  * Push auf main      -> nur bauen (Artefakte im Actions-Reiter)
-#  * Tag v*             -> bauen + Release mit beiden Zips
+#  * Tag v*             -> bauen + Release mit beiden Dateien
 #  * Manuell (Run workflow, Version eintragen) -> bauen + Release
 name: Build & Release
 on:
@@ -10,60 +10,50 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release-Version (z.B. v0.1.0), leer = nur bauen'
+        description: 'Release-Version (z.B. v1.1.0), leer = nur bauen'
         required: false
         default: ''
 permissions:
   contents: write            # nötig, damit der Workflow ein Release anlegen darf
 
 jobs:
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { os: windows-latest, script: 'package:win', name: Windows }
-          - { os: macos-latest,   script: 'package:mac', name: macOS }
-    runs-on: ${{ matrix.os }}
+  windows:
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
       - run: npm install
         working-directory: desktop
-      - run: npm run ${{ matrix.script }}
+      - run: npm run package:win
         working-directory: desktop
-
-      # Windows: ein Zip mit Federgewicht.exe
-      - name: Zip (Windows)
-        if: runner.os == 'Windows'
+      - name: Zip erstellen
         shell: pwsh
         run: Compress-Archive -Path dist/Federgewicht-win32-x64 -DestinationPath Federgewicht-Windows.zip
-
-      # macOS: "ditto" erhält die Symlinks im .app-Paket (normales zip würde die App kaputt machen)
-      - name: Zips (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          ditto -c -k --sequesterRsrc --keepParent dist/Federgewicht-darwin-arm64/Federgewicht.app Federgewicht-macOS-AppleSilicon.zip
-          ditto -c -k --sequesterRsrc --keepParent dist/Federgewicht-darwin-x64/Federgewicht.app   Federgewicht-macOS-Intel.zip
-
       - uses: actions/upload-artifact@v4
-        with:
-          name: Federgewicht-${{ matrix.name }}
-          path: Federgewicht-*.zip
+        with: { name: Federgewicht-Windows, path: Federgewicht-Windows.zip }
+
+  browser:
+    # Eine einzelne HTML-Datei (CSS und JS eingebettet): Doppelklick genügt, kein Server nötig.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tools/build-browser.py Federgewicht-Browser.html
+      - uses: actions/upload-artifact@v4
+        with: { name: Federgewicht-Browser, path: Federgewicht-Browser.html }
 
   release:
-    needs: build
+    needs: [windows, browser]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.version != '')
     steps:
       - uses: actions/download-artifact@v4
-        with: { path: zips, merge-multiple: true }
+        with: { path: files, merge-multiple: true }
       - name: Release veröffentlichen
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
         run: |
-          gh release create "$TAG" zips/*.zip --repo "${{ github.repository }}" --target "${{ github.sha }}" \
-            --title "Federgewicht $TAG" \
-            --notes "Windows: Zip entpacken, Federgewicht.exe starten. macOS: passendes Zip (Apple Silicon = M1 und neuer, Intel = ältere Macs) entpacken, beim ersten Start Rechtsklick auf die App -> Öffnen."
+          gh release create "$TAG" files/Federgewicht-Windows.zip files/Federgewicht-Browser.html \
+            --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "Federgewicht $TAG" \
+            --notes "Windows: Zip entpacken, Federgewicht.exe starten. Browser: Federgewicht-Browser.html herunterladen und per Doppelklick öffnen (läuft auf Windows, Mac und Linux)."
