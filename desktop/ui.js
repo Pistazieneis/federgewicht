@@ -475,6 +475,82 @@
     ctx.restore();
   }
 
+  /* ---- Das Fahrrad wird selbst gezeichnet (statt Emoji): gut sichtbar und mit echter Klingel.
+     Koordinaten in Einheiten des Objektradius r; x nach rechts, y nach unten. ---- */
+  // Angriffspunkte für die Bots. 'bell' markiert die Klingel: nur dort klingelt es.
+  const BIKE_PARTS = [
+    { x: 0.40, y: -0.40, bell: true },    // Klingel am Lenker
+    { x: -0.62, y: 0.35 },                // Hinterrad
+    { x: 0.62, y: 0.35 },                 // Vorderrad
+    { x: 0.05, y: 0.08 },                 // Rahmen
+    { x: -0.22, y: -0.24 },               // Sattel
+    { x: 0.52, y: -0.30 }                 // Lenker
+  ];
+  let bellPulse = 0;                      // 1 direkt nach einem Klingeln, klingt ab (für die kleinen Schallbögen)
+  function drawBike(r) {
+    const S_ = r;                         // Maßstab
+    const line = (x1, y1, x2, y2, w, c) => { ctx.strokeStyle = c; ctx.lineWidth = w * S_; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x1 * S_, y1 * S_); ctx.lineTo(x2 * S_, y2 * S_); ctx.stroke(); };
+    const wheel = (cx, cy) => {
+      const wr = 0.38 * S_, sp = clock * 11;
+      ctx.strokeStyle = '#eef1f5'; ctx.lineWidth = wr * 0.16; ctx.beginPath(); ctx.arc(cx * S_, cy * S_, wr, 0, 6.2832); ctx.stroke();   // heller Reifen
+      ctx.strokeStyle = 'rgba(190,200,214,.9)'; ctx.lineWidth = Math.max(1, wr * 0.025);
+      for (let k = 0; k < 8; k++) { const a = sp + k * 0.7854; ctx.beginPath(); ctx.moveTo(cx * S_, cy * S_); ctx.lineTo(cx * S_ + Math.cos(a) * wr, cy * S_ + Math.sin(a) * wr); ctx.stroke(); }  // drehende Speichen
+      ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = wr * 0.06;                                                                   // Drehunschärfe: Bögen auf dem Reifen
+      for (let k = 0; k < 3; k++) { const a = -sp * 1.3 + k * 2.09; ctx.beginPath(); ctx.arc(cx * S_, cy * S_, wr * 1.1, a, a + 0.7); ctx.stroke(); }
+      ctx.fillStyle = '#c8d0db'; ctx.beginPath(); ctx.arc(cx * S_, cy * S_, wr * 0.1, 0, 6.2832); ctx.fill();
+    };
+    wheel(-0.62, 0.35); wheel(0.62, 0.35);
+    const FR = '#ff5a36';                 // leuchtendes Rot-Orange für den Rahmen
+    line(-0.62, 0.35, -0.22, -0.18, 0.07, FR); line(-0.22, -0.18, -0.08, 0.38, 0.07, FR);        // Hinterbau, Sitzrohr
+    line(-0.62, 0.35, -0.08, 0.38, 0.06, FR); line(-0.22, -0.18, 0.38, -0.12, 0.07, FR);         // Kettenstrebe, Oberrohr
+    line(-0.08, 0.38, 0.38, -0.12, 0.08, FR); line(0.38, -0.12, 0.62, 0.35, 0.06, '#ffb02e');    // Unterrohr, Gabel
+    line(0.38, -0.12, 0.38, -0.34, 0.06, '#ffb02e'); line(0.30, -0.34, 0.54, -0.30, 0.06, '#ffb02e');   // Lenkerstange, Lenker
+    line(-0.34, -0.22, -0.12, -0.22, 0.09, '#ffd23f');                                            // Sattel (gelb)
+    line(-0.08, 0.38, -0.02, 0.52, 0.04, '#cfd6e0'); line(-0.08, 0.38, -0.14, 0.24, 0.04, '#cfd6e0');   // Pedale
+    // Klingel: goldene Halbkugel mit Glanz; wackelt und sendet Schallbögen, wenn gerade geklingelt wird
+    const bx = 0.40 * S_, by = -0.40 * S_, br = 0.085 * S_, wob = Math.sin(clock * 60) * 0.12 * bellPulse;
+    ctx.save(); ctx.translate(bx, by); ctx.rotate(wob);
+    ctx.fillStyle = '#ffcf3a'; ctx.beginPath(); ctx.arc(0, 0, br, Math.PI, 0); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#b58a10'; ctx.fillRect(-br, 0, br * 2, br * 0.22);
+    ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.beginPath(); ctx.arc(-br * 0.35, -br * 0.45, br * 0.22, 0, 6.2832); ctx.fill();
+    ctx.restore();
+    if (bellPulse > 0.02) {               // Schallbögen ("ding") links und rechts der Klingel
+      ctx.strokeStyle = `rgba(255,236,150,${bellPulse})`; ctx.lineWidth = Math.max(1.5, S_ * 0.018);
+      for (let k = 1; k <= 3; k++) { const rr = br * (1.4 + k * 0.7 + (1 - bellPulse) * 1.4);
+        ctx.beginPath(); ctx.arc(bx, by, rr, -2.3, -0.85); ctx.stroke(); }
+    }
+  }
+
+  /** Geschwindigkeitszeichen: geschwungene Wischer um das Objekt und Fall-Streifen darüber (wie im Comic). */
+  function swoosh(rad, a0, a1, alpha, w) {
+    // Bogen in 7 Stücken, die zum Ende hin verblassen und dünner werden -> läuft spitz zu
+    const n = 7;
+    for (let i = 0; i < n; i++) {
+      const k = i / n, aa = a0 + (a1 - a0) * k, ab = a0 + (a1 - a0) * (k + 1 / n);
+      ctx.strokeStyle = `rgba(255,255,255,${alpha * (1 - k)})`; ctx.lineWidth = Math.max(1, w * (1 - k * 0.8));
+      ctx.beginPath(); ctx.arc(0, 0, rad, Math.min(aa, ab) - 0.02, Math.max(aa, ab) + 0.02); ctx.stroke();   // immer der kurze Weg, egal in welche Richtung
+    }
+  }
+  function drawSpeedMarks(r, intensity) {
+    ctx.save(); ctx.lineCap = 'round';
+    // Fall-Streifen: laufen von oben nach unten durch, unterschiedlich lang
+    for (let i = 0; i < 9; i++) {
+      const x = (((i * 0.6180339) % 1) * 2 - 1) * r * 1.15;
+      const len = r * (0.5 + ((i * 0.37) % 0.9)), off = ((clock * (1.8 + (i % 3) * 0.7) + i * 0.31) % 1);
+      const y0 = -r * 2.2 + off * r * 2.6;
+      const g = ctx.createLinearGradient(0, y0, 0, y0 + len);
+      g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(1, `rgba(255,255,255,${0.35 * intensity})`);
+      ctx.strokeStyle = g; ctx.lineWidth = Math.max(1.5, r * 0.02);
+      ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y0 + len); ctx.stroke();
+    }
+    // Wischer-Bögen, die um das Objekt kreisen
+    for (let i = 0; i < 4; i++) {
+      const a = clock * (1.6 + i * 0.2) * (i % 2 ? -1 : 1) + i * 1.6;
+      swoosh(r * (1.3 + (i % 2) * 0.18), a, a + 0.9 * (i % 2 ? -1 : 1), 0.55 * intensity, r * 0.035);
+    }
+    ctx.restore();
+  }
+
   /** Bots als kleine Sprites, je nach Typ anders: sie schweben dicht um das Objekt und schneiden mit Strahlen hinein. */
   const BOT_COLORS = ['#ffcf7a', '#ffa15a', '#ff5a5a', '#58b7ff', '#c283ff', '#6df5e1'];
   function drawBot(i, x, y, s, a) {
@@ -502,16 +578,24 @@
     ctx.restore();
   }
   /** Zeichnet alle Bots (max. 18 Sprites, gewichtet nach Besitz) um das Objekt. Koordinaten relativ zur Objektmitte. */
-  function drawBots(r, dt) {
+  const mineState = { bell: false };       // wird beim Zeichnen gesetzt: arbeitet gerade ein Bot an der Klingel?
+  function drawBots(r, dt, targets) {
+    mineState.bell = false;
     const list = [];
     S.bots.forEach((c, i) => { const n = c > 0 ? Math.min(6, Math.max(1, Math.round(Math.sqrt(c)))) : 0; for (let k = 0; k < n; k++) list.push(i); });
     const sprites = list.slice(-18), n = sprites.length;
     const s = Math.max(5, Math.min(13, r * 0.07));
     sprites.forEach((tier, idx) => {
-      const a = clock * (0.25 + (idx % 3) * 0.07) * (idx % 2 ? 1 : -1) + idx * 6.2832 / n;
+      let a = clock * (0.25 + (idx % 3) * 0.07) * (idx % 2 ? 1 : -1) + idx * 6.2832 / n;
+      let tx = Math.cos(a) * r * 0.78, ty = Math.sin(a) * r * 0.78;        // Auftreffpunkt auf dem Objekt (Standard: Rand)
+      if (targets) {
+        // Gezielter Abbau an einzelnen Teilen: jeder Bot wechselt alle paar Sekunden zum nächsten Teil
+        const part = targets[Math.floor(clock * 0.45 + idx * 1.37) % targets.length];
+        tx = part.x; ty = part.y; if (part.bell) mineState.bell = true;
+        a = Math.atan2(ty, tx) + 0.3 * Math.sin(clock + idx);              // Bot schwebt auf der Seite seines Ziels
+      }
       const d = r * (1.12 + 0.05 * Math.sin(clock * 2 + idx));
       const bx = Math.cos(a) * d, by = Math.sin(a) * d;
-      const tx = Math.cos(a) * r * 0.78, ty = Math.sin(a) * r * 0.78;      // Auftreffpunkt auf dem Objekt
       const col = BOT_COLORS[tier], w = 1 + tier * 0.5;
       ctx.lineCap = 'round';
       ctx.strokeStyle = col; ctx.globalAlpha *= 0.35; ctx.lineWidth = w * 3; ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(tx, ty); ctx.stroke();   // Schein
@@ -592,7 +676,7 @@
   /** Zeichnet das ganze Bild. dt = echte Sekunden seit dem letzten Bild.
       Kamera: Das Objekt bleibt groß in der Bildmitte, die Erde wächst von unten heran, bis sie es trifft. */
   function render(dt) {
-    clock += dt; spawnT = Math.min(1, spawnT + dt / 0.6); earthT = Math.min(1, earthT + dt / 1.8);
+    clock += dt; bellPulse = Math.max(0, bellPulse - dt * 2.5); spawnT = Math.min(1, spawnT + dt / 0.6); earthT = Math.min(1, earthT + dt / 1.8);
     ctx.save();
     if (shake > 0.1) { ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake); shake *= Math.pow(0.05, dt); }
     ctx.fillStyle = '#04060b'; ctx.fillRect(-100, -100, W + 200, H + 200);
@@ -616,9 +700,18 @@
         // Taumeln: jedes Objekt dreht sich mit eigener Geschwindigkeit/Richtung und wippt leicht
         const spin = clock * (0.9 + (m.n % 4) * 0.35) * (m.n % 2 ? 1 : -1) + m.n;
         drawTrail(r, Math.PI / 2, heat);                                      // Feuerschweif nach oben (es fällt nach unten)
-        if (m.funny) drawEmoji(m.emoji, r, spin + Math.sin(clock * 3) * 0.2, heat);
+        let targets = null;
+        if (m.funny) drawSpeedMarks(r, 0.6 + heat * 0.8);                     // Bewegungszeichen bei allen Alltagsobjekten
+        if (m.name === 'Fahrrad') {
+          // Eigene Zeichnung: dreht sich langsamer, damit man die Klingel sieht; Zielpunkte mitdrehen
+          const sp = clock * 0.7 + Math.sin(clock * 2) * 0.15, c = Math.cos(sp), s_ = Math.sin(sp);
+          ctx.save(); ctx.rotate(sp);
+          if (heat > 0) { const hg = ctx.createRadialGradient(0, 0, r * 0.2, 0, 0, r * 1.5); hg.addColorStop(0, `rgba(255,190,90,${0.5 * heat})`); hg.addColorStop(1, 'rgba(255,90,20,0)'); ctx.fillStyle = hg; ctx.beginPath(); ctx.arc(0, 0, r * 1.5, 0, 6.2832); ctx.fill(); }
+          drawBike(r); ctx.restore();
+          targets = BIKE_PARTS.map((q) => ({ x: (q.x * c - q.y * s_) * r, y: (q.x * s_ + q.y * c) * r, bell: q.bell }));
+        } else if (m.funny) drawEmoji(m.emoji, r, spin + Math.sin(clock * 3) * 0.2, heat);
         else drawRock(r, m.n * 31 + 5, spin * 0.3, Math.PI / 2, heat);
-        if (fight) drawBots(r, dt);
+        if (fight) drawBots(r, dt, targets);
         ctx.restore();
         if (fight) {
           // Aus dem Objekt lösen sich Trümmer: je höher der Abbau (relativ zur Masse), desto mehr
@@ -666,7 +759,7 @@
   }
   function endFight(res) {
     if (res.destroyed) {
-      playKill(); addFeed(res); Sfx.play('kill'); if (res.n === 1) Sfx.play('bellKill');   // Fahrrad: Klingeln
+      playKill(); addFeed(res); Sfx.play('kill'); if (res.n === 1) { Sfx.play('bellKill'); bellPulse = 1; }   // Fahrrad: Klingel-Triller
     } else {
       startBoom(res); Sfx.humStop(); Sfx.play('boom');
       showReport(); updateShops(); save();
@@ -691,7 +784,7 @@
     }, 'Wirklich löschen?');
   });
 
-  let last = performance.now(), uiTimer = 0, lastWarn = -1, zapAcc = 0, bellAcc = 0;
+  let last = performance.now(), uiTimer = 0, lastWarn = -1, zapAcc = 0, mineAcc = 0;
   function frame(now) {
     const real = Math.min(0.25, (now - last) / 1000); last = now;
     // Spiellogik in kleinen Schritten (max. 0,1 s), damit hohe Geschwindigkeit nichts überspringt
@@ -706,10 +799,19 @@
       const sec = Math.ceil(S.meteor.timeLeft);
       if (sec <= 5 && sec !== lastWarn && S.meteor.remaining > 0) { lastWarn = sec; Sfx.play('warn'); }
       if (sec > 5) lastWarn = -1;
-      zapAcc += real * Math.min(6, Math.sqrt(S.bots.reduce((a, b) => a + b, 0)) * 0.8);
+      zapAcc += real * Math.min(4, Math.sqrt(S.bots.reduce((a, b) => a + b, 0)) * 0.5);
       if (zapAcc >= 1) { zapAcc = 0; Sfx.play('zap'); }
-      // Das Fahrrad klingelt, solange es abgebaut wird
-      if (S.meteor.n === 1 && C.baseRate(S) > 0) { bellAcc += real; if (bellAcc > 0.9) { bellAcc = -Math.random() * 0.6; Sfx.play('bell'); } }
+      // Abbaugeräusch je Objekt. Beim Fahrrad klingelt es NUR, wenn gerade ein Bot an der Klingel arbeitet;
+      // an den anderen Fahrradteilen gibt es nur ein metallisches "Tink".
+      const bots = S.bots.reduce((a, b) => a + b, 0);
+      if (bots > 0) {
+        mineAcc += real;
+        const mm = S.meteor, key = mm.funny ? mm.name : 'Gestein';
+        if (key === 'Fahrrad') {
+          if (mineState.bell) { if (mineAcc > 0.55) { mineAcc = 0; Sfx.play('bell'); bellPulse = 1; } }
+          else if (mineAcc > 0.5 + Math.random() * 0.3) { mineAcc = 0; Sfx.mine('Fahrrad:tink'); }
+        } else if (mineAcc > Sfx.mineEvery(key) * (0.7 + Math.random() * 0.6) / (1 + 0.12 * Math.sqrt(bots))) { mineAcc = 0; Sfx.mine(key); }
+      }
     }
     render(real);
     uiTimer += real;
@@ -722,5 +824,5 @@
   requestAnimationFrame(frame);
 
   // Zum Testen im Browser/Konsole erreichbar
-  window.__game = { get state() { return S; }, Core: C, get boom() { return boom; } };
+  window.__game = { get state() { return S; }, Core: C, get boom() { return boom; }, get mineState() { return mineState; } };
 })();

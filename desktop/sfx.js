@@ -57,12 +57,20 @@ const Sfx = (function () {
     s.connect(f); f.connect(g); g.connect(master); s.start(t0, Math.random()); s.stop(t0 + dur + 0.05);
   }
 
-  /** Ein einzelner Klingelton (Grundton + Oberton, metallisch kurz). */
-  function ring(delay) {
-    tone(2350, 0.55, 'sine', 0.22, 0, delay);
-    tone(3520, 0.40, 'sine', 0.14, 0, delay);
-    tone(4700, 0.18, 'triangle', 0.05, 0, delay);
+  /** Ein Anschlag der Fahrradklingel: mehrere unharmonische Obertöne (wie bei echtem Metall) plus
+      ein winziger heller Klick vom Hämmerchen. vol = Lautstärke-Faktor. */
+  function ding(delay, vol) {
+    vol = vol || 1;
+    [[2090, 0.9, 0.20], [2112, 0.8, 0.12], [3140, 0.6, 0.12], [4210, 0.4, 0.08], [6280, 0.2, 0.04]]
+      .forEach(([f, d, v]) => tone(f, d, 'sine', v * vol, 0, delay));
+    noise(0.03, 0.22 * vol, 7000, 2500, delay, 'bandpass');
   }
+
+  /** Ein metallisches "Tink", wenn ein Bot irgendwo am Metall des Objekts arbeitet. */
+  function tink() { noise(0.05, 0.16, 5200, 1800, 0, 'bandpass'); tone(1500 + Math.random() * 700, 0.07, 'triangle', 0.08, 900); }
+
+  // Klaviertöne (Pentatonik, klingt immer schön)
+  const PENTA = [262, 294, 330, 392, 440, 523, 587, 659];
 
   const sounds = {
     // Kaufen: zwei schnelle Pieptöne
@@ -87,14 +95,37 @@ const Sfx = (function () {
       noise(2.0, 0.35, 600, 60, 1.8);                             // Nachbeben
       [0, 0.18, 0.4].forEach((d) => tone(2200 + Math.random() * 900, 0.5, 'sine', 0.06, 700, 1.4 + d));   // klirrende Splitter
     },
-    // Fahrradklingel: heller "Ring" aus zwei Obertönen mit schnellem Ausklingen; einmal beim Abbau ...
-    bell:     () => ring(0),
-    // ... und dreimal "ring-ring-ring", wenn das Fahrrad zerstört ist
-    bellKill: () => { ring(0); ring(0.15); ring(0.30); },
+    // Fahrradklingel beim Abbau an der Klingel: "ting-ting"
+    bell:     () => { ding(0); ding(0.09, 0.7); },
+    // Fahrrad zerstört: Klingel-Triller, der ausklingt ("tri-ri-ri-ri-ring")
+    bellKill: () => { for (let i = 0; i < 8; i++) ding(i * 0.06, 1 - i * 0.09); },
     // Prestige: festlicher Akkord
     prestige: () => { [262, 330, 392, 523, 659].forEach((f, i) => tone(f, 0.9, 'triangle', 0.2, 0, i * 0.09)); },
     // Neue Erde erscheint: sanftes Aufglimmen
     reborn:  () => { tone(330, 0.6, 'sine', 0.2, 660); tone(495, 0.6, 'sine', 0.15, 990, 0.1); }
+  };
+
+  /* ---- Abbaugeräusche: Jedes Objekt klingt beim Abbau anders. 'every' = typischer Abstand in Sekunden. ---- */
+  const hoof = (d) => { noise(0.06, 0.35, 900, 250, d); tone(210, 0.08, 'sine', 0.2, 110, d); };
+  const horn = (f1, f2, dur, v) => { tone(f1, dur, 'square', v); tone(f2, dur, 'square', v * 0.9); };
+  const MINE = {
+    'Fahrrad:tink':          { every: 0.5, fn: tink },
+    'Sofa':                  { every: 0.6, fn: () => { tone(130, 0.14, 'sine', 0.5, 60); noise(0.12, 0.25, 500, 120);
+                                                         if (Math.random() < 0.35) tone(850, 0.12, 'triangle', 0.07, 1250, 0.05); } },      // dumpfes Plumpsen + Quietscher
+    'Motorrad':              { every: 0.7, fn: () => { tone(60, 0.35, 'sawtooth', 0.12, 130); tone(120, 0.3, 'sawtooth', 0.05, 240); noise(0.3, 0.07, 700, 200); } },  // Knattern
+    'Klavier':               { every: 0.5, fn: () => { const f = PENTA[(Math.random() * PENTA.length) | 0]; tone(f, 0.9, 'triangle', 0.2); tone(f * 2, 0.6, 'sine', 0.06); } },
+    'Pferd':                 { every: 0.8, fn: () => { hoof(0); hoof(0.14); } },                                                           // Hufgetrappel
+    'Kleinwagen':            { every: 1.4, fn: () => { horn(440, 554, 0.16, 0.07); } },                                                     // Hupen
+    'Elefant':               { every: 2.2, fn: () => { tone(280, 0.5, 'sawtooth', 0.12, 620); tone(560, 0.45, 'sawtooth', 0.04, 1000, 0.03); } },   // Törööö
+    'Schulbus':              { every: 1.6, fn: () => { horn(220, 277, 0.3, 0.07); } },
+    'Lokomotive':            { every: 0.45, fn: () => { noise(0.14, 0.3, 1400, 300); if (Math.random() < 0.1) { tone(880, 0.5, 'triangle', 0.08); tone(1175, 0.5, 'triangle', 0.06); } } }, // Tschuff
+    'Blauwal':               { every: 2.8, fn: () => { tone(110, 0.8, 'sine', 0.25, 260); tone(260, 0.9, 'sine', 0.2, 130, 0.7); } },     // Walgesang
+    'Jumbojet':              { every: 1.2, fn: () => { noise(0.9, 0.3, 400, 3000, 0, 'bandpass'); } },                                       // Düsenrauschen
+    'Eiffelturm':            { every: 0.9, fn: () => { [440, 1180, 1900].forEach((f, i) => tone(f, 0.9 - i * 0.2, 'triangle', 0.1 - i * 0.025)); } },  // Eisenträger-"Dong"
+    'Kreuzfahrtschiff':      { every: 3.0, fn: () => { horn(98, 147, 1.0, 0.09); } },                                                       // Schiffshorn
+    'Empire State Building': { every: 1.3, fn: () => { tone(1318, 0.5, 'sine', 0.14); tone(988, 0.6, 'sine', 0.12, 0, 0.25); } },          // Aufzug-"Bing-Bong"
+    'Cheops-Pyramide':       { every: 0.7, fn: () => { noise(0.45, 0.35, 600, 120); tone(70, 0.4, 'sine', 0.3, 40); } },                    // Steinschleifen
+    'Gestein':               { every: 0.35, fn: () => { noise(0.14, 0.3, 3200, 250); tone(90, 0.1, 'sine', 0.25, 50); } }                  // Knirschen bei ernsten Objekten
   };
 
   /** Leises Dauerrauschen während eines Laufs (Weltraum-Hintergrund, tiefes Summen der Bots). */
@@ -115,6 +146,10 @@ const Sfx = (function () {
 
   return {
     play(name) { if (!muted && unlock() && sounds[name]) sounds[name](); },
+    /** Spielt das Abbaugeräusch des Objekts. key = Objektname oder 'Gestein' / 'Fahrrad:tink'. */
+    mine(key) { if (!muted && unlock()) { const m = MINE[key] || MINE.Gestein; m.fn(); } },
+    /** Typischer Abstand zwischen zwei Abbaugeräuschen in Sekunden. */
+    mineEvery(key) { return (MINE[key] || MINE.Gestein).every; },
     humStart() { if (!muted && unlock()) humStart(); },
     humStop,
     isMuted: () => muted,
