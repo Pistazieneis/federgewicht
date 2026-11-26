@@ -1,39 +1,69 @@
-# Baut die Windows-.exe auf GitHub. Bei einem Tag (v*) oder manuellem Start mit Version wird ein Release mit Zip erstellt.
-name: Build Windows EXE
+# Baut das Spiel für Windows (x64) und macOS (Intel + Apple Silicon) und legt es als Release ab.
+#  * Push auf main      -> nur bauen (Artefakte im Actions-Reiter)
+#  * Tag v*             -> bauen + Release mit beiden Zips
+#  * Manuell (Run workflow, Version eintragen) -> bauen + Release
+name: Build & Release
 on:
   push:
     branches: [main]
     tags: ['v*']
-  workflow_dispatch:           # manuell starten: Actions -> Run workflow, Version eintragen -> erzeugt Release
+  workflow_dispatch:
     inputs:
       version:
-        description: 'Release-Version (z.B. v1.0.0), leer = nur bauen'
+        description: 'Release-Version (z.B. v0.1.0), leer = nur bauen'
         required: false
-        default: 'v1.0.0'
+        default: ''
 permissions:
   contents: write            # nötig, damit der Workflow ein Release anlegen darf
+
 jobs:
   build:
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, script: 'package:win', name: Windows }
+          - { os: macos-latest,   script: 'package:mac', name: macOS }
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
       - run: npm install
         working-directory: desktop
-      - run: npm run package
+      - run: npm run ${{ matrix.script }}
         working-directory: desktop
-      - name: Zip erstellen
+
+      # Windows: ein Zip mit Federgewicht.exe
+      - name: Zip (Windows)
+        if: runner.os == 'Windows'
         shell: pwsh
         run: Compress-Archive -Path dist/Federgewicht-win32-x64 -DestinationPath Federgewicht-Windows.zip
+
+      # macOS: "ditto" erhält die Symlinks im .app-Paket (normales zip würde die App kaputt machen)
+      - name: Zips (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent dist/Federgewicht-darwin-arm64/Federgewicht.app Federgewicht-macOS-AppleSilicon.zip
+          ditto -c -k --sequesterRsrc --keepParent dist/Federgewicht-darwin-x64/Federgewicht.app   Federgewicht-macOS-Intel.zip
+
       - uses: actions/upload-artifact@v4
         with:
-          name: Federgewicht-Windows
-          path: Federgewicht-Windows.zip
+          name: Federgewicht-${{ matrix.name }}
+          path: Federgewicht-*.zip
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.version != '')
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: zips, merge-multiple: true }
       - name: Release veröffentlichen
-        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.version != '')
-        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
-        run: gh release create "$env:TAG" Federgewicht-Windows.zip --target "${{ github.sha }}" --title "Federgewicht $env:TAG" --notes "Windows-Version. Zip entpacken und Federgewicht.exe starten."
+        run: |
+          gh release create "$TAG" zips/*.zip --repo "${{ github.repository }}" --target "${{ github.sha }}" \
+            --title "Federgewicht $TAG" \
+            --notes "Windows: Zip entpacken, Federgewicht.exe starten. macOS: passendes Zip (Apple Silicon = M1 und neuer, Intel = ältere Macs) entpacken, beim ersten Start Rechtsklick auf die App -> Öffnen."

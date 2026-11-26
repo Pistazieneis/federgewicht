@@ -1,8 +1,8 @@
 {
   "name": "federgewicht",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "main": "main.js",
-  "description": "Federgewicht - Pixel Idle Game",
+  "description": "Federgewicht - Idle-Game: Meteoriten abbauen, bevor sie einschlagen",
   "license": "UNLICENSED",
   "devDependencies": {
     "@electron/packager": "^20.3.0",
@@ -10,7 +10,9 @@
   },
   "scripts": {
     "start": "electron .",
-    "package": "electron-packager . Federgewicht --platform=win32 --arch=x64 --out=../dist --overwrite --prune=true"
+    "package:win": "electron-packager . Federgewicht --platform=win32 --arch=x64 --out=../dist --overwrite --prune=true",
+    "package:mac": "electron-packager . Federgewicht --platform=darwin --arch=x64,arm64 --out=../dist --overwrite --prune=true",
+    "test": "node ../tools/sim.js 10"
   },
   "private": true
 }

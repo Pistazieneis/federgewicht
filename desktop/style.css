@@ -1,0 +1,151 @@
+/* ==========================================================================
+   Federgewicht – Erscheinungsbild
+   Nüchterne, technische Optik: dunkle Flächen, dünne Linien, Systemschrift.
+   Farben stehen als Variablen oben, damit man sie zentral ändern kann.
+   ========================================================================== */
+:root {
+  --bg: #090b10;
+  --panel: #10141b;
+  --panel2: #151a23;
+  --line: #232b38;
+  --text: #d6dbe4;
+  --muted: #8591a3;
+  --dm: #e0b25a;        /* ΔM */
+  --ir: #9db8e0;        /* Iridium */
+  --fp: #b39ddb;        /* Forschung */
+  --ok: #5bb98c;
+  --warn: #e0a24a;
+  --bad: #d9604f;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  display: flex; flex-direction: column; overflow: hidden; user-select: none;
+}
+b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+[hidden] { display: none !important; }
+
+/* ---------------------------------------------------------------- Kopfzeile */
+#top {
+  display: flex; align-items: center; gap: 28px; padding: 10px 18px;
+  background: var(--panel); border-bottom: 1px solid var(--line);
+}
+.brand { font-weight: 700; letter-spacing: .22em; font-size: 15px; }
+.brand small { display: block; font-weight: 400; letter-spacing: .12em; font-size: 10px; color: var(--muted); text-transform: uppercase; }
+.resources { display: flex; gap: 26px; flex: 1; }
+.res { display: flex; flex-direction: column; min-width: 90px; }
+.res .lbl { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.res .val { font: 600 20px var(--mono); font-variant-numeric: tabular-nums; }
+.res .sub { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+.res:nth-child(1) .val { color: var(--dm); }
+#boxIr .val { color: var(--ir); }
+#boxFp .val { color: var(--fp); }
+.tools { display: flex; gap: 10px; align-items: center; }
+
+button { font: inherit; color: inherit; cursor: pointer; }
+.ghost { background: none; border: 1px solid var(--line); color: var(--muted); padding: 5px 10px; border-radius: 4px; }
+.ghost:hover { color: var(--text); border-color: #38455a; }
+.seg { display: flex; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.seg button { background: none; border: 0; padding: 5px 10px; color: var(--muted); }
+.seg button.on { background: #1d2532; color: var(--text); }
+
+/* ------------------------------------------------------------------- Layout */
+main { flex: 1; display: flex; min-height: 0; }
+#stage { flex: 1; position: relative; min-width: 0; background: #000; overflow: hidden; }
+#scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; }
+#side { width: 420px; background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; position: relative; }
+
+.overlay { position: absolute; inset: 0; pointer-events: none; padding: 16px; display: none; }
+.overlay.on { display: block; }
+.overlay > * { pointer-events: auto; }
+.card {
+  background: rgba(12, 15, 21, .82); backdrop-filter: blur(6px);
+  border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px;
+}
+.row { display: flex; justify-content: space-between; gap: 18px; margin: 3px 0; }
+.big { font: 600 22px var(--mono); }
+.hud-title { display: flex; justify-content: space-between; gap: 14px; font-weight: 600; margin-bottom: 8px; letter-spacing: .04em; }
+.hud-title .muted { font-weight: 400; font-size: 12px; }
+
+/* HUD im Kampf */
+.hud-left  { position: absolute; left: 16px;  top: 16px; width: 290px; }
+.hud-right { position: absolute; right: 16px; top: 16px; width: 250px; }
+.bar { height: 6px; background: #1b222d; border-radius: 3px; overflow: hidden; margin: 6px 0 8px; }
+.bar i { display: block; height: 100%; width: 100%; background: var(--dm); transition: width .15s linear; }
+.bar.time i { background: var(--ok); }
+.mine {
+  position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%);
+  background: rgba(12, 15, 21, .85); border: 1px solid #3b4658; border-radius: 6px; padding: 12px 34px;
+  font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+}
+.mine small { display: block; font: 400 11px var(--mono); color: var(--muted); text-transform: none; letter-spacing: 0; }
+.mine:hover { border-color: var(--dm); }
+.mine:active { transform: translateX(-50%) scale(.98); }
+
+/* Upgrade-Fenster */
+.report { position: absolute; left: 16px; top: 16px; width: 330px; }
+.rep-head { font-weight: 700; letter-spacing: .05em; margin-bottom: 8px; }
+.rep-head.good { color: var(--ok); }
+.rep-head.bad  { color: var(--bad); }
+.rep-body { display: grid; grid-template-columns: 1fr auto; gap: 3px 16px; }
+.next { position: absolute; right: 16px; top: 16px; width: 310px; }
+.grid2 { display: grid; grid-template-columns: 1fr auto; gap: 4px 16px; }
+.forecast { margin: 10px 0 12px; padding: 7px 9px; border-radius: 4px; background: #161c26; font-size: 13px; }
+.forecast.good { border-left: 3px solid var(--ok); }
+.forecast.mid  { border-left: 3px solid var(--warn); }
+.forecast.bad  { border-left: 3px solid var(--bad); }
+.hint { margin-top: 8px; font-size: 12px; color: var(--muted); }
+.primary {
+  width: 100%; padding: 11px; border-radius: 5px; border: 1px solid #c9984a; background: #3a2d14; color: #f1d9a6;
+  font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+}
+.primary:hover { background: #4a3918; }
+.primary small { margin-left: 10px; font: 400 11px var(--mono); opacity: .6; text-transform: none; letter-spacing: 0; }
+
+/* ------------------------------------------------------------------- Shops */
+#tabs { display: flex; border-bottom: 1px solid var(--line); }
+#tabs button { flex: 1; background: none; border: 0; border-bottom: 2px solid transparent; padding: 11px 6px; color: var(--muted); letter-spacing: .05em; }
+#tabs button.on { color: var(--text); border-bottom-color: var(--dm); background: var(--panel2); }
+#tabs button:hover { color: var(--text); }
+#lists { flex: 1; overflow-y: auto; min-height: 0; }
+.list { display: none; padding: 10px; }
+.list.on { display: block; }
+.lock { position: absolute; left: 0; right: 0; bottom: 0; padding: 8px 14px; background: #2a1f12; color: #e8c88a; font-size: 12px; border-top: 1px solid #4a3818; z-index: 2; }
+#side.locked .item { opacity: .55; }
+
+.item { display: flex; gap: 12px; align-items: center; padding: 10px 12px; margin-bottom: 8px; background: var(--panel2); border: 1px solid var(--line); border-radius: 5px; }
+.item.dim { opacity: .5; }
+.i-main { flex: 1; min-width: 0; }
+.i-name { font-weight: 600; }
+.i-desc { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.i-stat { font: 12px var(--mono); color: var(--muted); margin-top: 3px; }
+.i-owned { font: 600 18px var(--mono); text-align: center; min-width: 36px; }
+.item .buy {
+  min-width: 108px; padding: 7px 8px; border-radius: 4px; border: 1px solid #3a475b; background: #1a2230;
+  font: 600 12px var(--mono);
+}
+.item .buy:hover:not(:disabled) { border-color: var(--dm); }
+.item .buy:disabled { opacity: .4; cursor: not-allowed; }
+.item .buy.ir { color: var(--ir); } .item .buy.fp { color: var(--fp); } .item .buy.dm { color: var(--dm); }
+.section-title { margin: 14px 2px 8px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.note { margin: 2px 2px 12px; font-size: 12px; color: var(--muted); }
+.pres-box { padding: 12px; border: 1px solid #3c3354; border-radius: 6px; background: #17142a; margin-bottom: 12px; }
+.pres-box .row { margin: 4px 0; }
+.pres-box .primary { margin-top: 10px; border-color: #7e68b8; background: #2a2150; color: #d9cdf5; }
+.pres-box .primary:hover:not(:disabled) { background: #362b66; }
+.primary:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ------------------------------------------------------------------- Toast */
+#toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); opacity: 0; transition: .25s; background: #1d2532; border: 1px solid #38455a; padding: 8px 16px; border-radius: 5px; pointer-events: none; }
+#toast.on { opacity: 1; transform: translate(-50%, 0); }
+
+/* ---------------------------------------------------------- schmale Fenster */
+@media (max-width: 900px) {
+  main { flex-direction: column; }
+  #side { width: auto; height: 45%; border-left: 0; border-top: 1px solid var(--line); }
+  .hud-left, .report { width: 240px; } .hud-right, .next { width: 240px; }
+}
