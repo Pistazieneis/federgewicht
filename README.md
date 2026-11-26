@@ -8,7 +8,8 @@ Baue Bots und Upgrades, die ihn abbauen, bevor er einschlägt.
 2. Der Meteorit fliegt an. Bots bauen ihn ab, du kannst zusätzlich manuell abbauen (Klick / Leertaste).
 3. Ob zerstört oder eingeschlagen: Die abgebaute Masse wird zu ΔM. Im **Upgrade-Fenster** kaufst du neue Bots und Upgrades.
 4. Nur **vollständig zerstörte** Objekte hinterlassen **Iridium** (Spezialwährung für Spezialausrüstung).
-   Schlägt ein Meteorit ein, kommt ein gleich schwerer; nur ein Sieg bringt die nächste Stufe.
+   Jeder zerstörte Meteorit bringt die nächste, schwerere Stufe. Schlägt einer ein, geht es wieder bei
+   Stufe 1 (dem leichtesten Objekt) los. Bots und Upgrades bleiben, du kommst jedes Mal weiter.
 5. Die Objekte sind in **Klassen** eingeteilt (Meteoroid, Meteorit, Asteroid, ...). Zwischen den Klassen
    liegen große Massensprünge, das sind die Wände.
 6. **Prestige** (ab dem 5. Meteoriten): Forschungspunkte hängen vom insgesamt gewonnenen ΔM ab,

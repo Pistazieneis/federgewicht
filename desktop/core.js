@@ -185,6 +185,7 @@
       meteorN: 1,                 // Stufe (Masse) des nächsten Meteoriten in diesem Durchlauf
       meteorsSeen: 0,             // abgehandelte Meteoriten insgesamt (schaltet Prestige frei)
       destroyed: 0, impacts: 0, prestiges: 0,
+      bestLevel: 0,               // höchste je zerstörte Stufe (Rekord, bleibt über Prestige)
       phase: 'shop',              // 'shop' = Upgrade-Fenster, 'fight' = Meteorit im Anflug
       meteor: null,
       last: null                  // Ergebnis des letzten Meteoriten (für die Anzeige)
@@ -193,9 +194,9 @@
     return s;
   }
 
-  /** Erzeugt den nächsten Meteoriten. Die Masse hängt nur von s.meteorN ab (= Stufe),
-      und die Stufe steigt NUR, wenn man den Meteoriten zerstört hat. Schlägt einer ein,
-      kommt ein gleich schwerer nach -> man kann nie in eine unlösbare Lage geraten. */
+  /** Erzeugt den nächsten Meteoriten. Die Masse hängt nur von s.meteorN ab (= Stufe).
+      Jeder zerstörte Meteorit erhöht die Stufe, jeder Einschlag setzt sie auf 1 zurück.
+      Dadurch kann man nie unlösbar festhängen: Stufe 1 ist immer schaffbar. */
   function makeMeteor(s) {
     const n = s.meteorN, info = levelInfo(n), mass = info.mass;
     const time = timeLimit(s);
@@ -291,8 +292,12 @@
     else s.impacts++;
     s.meteorsSeen++;
     s.last = { destroyed: dead, n: m.n, name: m.name, mass: m.mass, mined: minedMass, gain, iridium: drop,
-               fraction: minedMass / m.mass };
-    if (dead) s.meteorN++;             // nur ein Sieg erhöht die Stufe
+               fraction: minedMass / m.mass, best: s.bestLevel };
+    // Sieg: nächstschwerer Meteorit. Einschlag: zurück zum leichtesten (Stufe 1);
+    // Bots und Upgrades bleiben, man klettert also jedes Mal ein Stück höher.
+    const reached = m.n;
+    if (dead) { s.meteorN++; s.bestLevel = Math.max(s.bestLevel, s.meteorN - 1); }
+    else s.meteorN = 1;
     s.phase = 'shop';
     s.meteor = makeMeteor(s);          // Vorschau auf den nächsten Meteoriten
     return s.last;

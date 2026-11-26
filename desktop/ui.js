@@ -243,7 +243,8 @@
       ['ΔM gewonnen', '+' + C.fmtMass(r.gain)]
     ];
     if (r.destroyed) rows.push(['Iridium gefunden', '+' + r.iridium]);
-    else rows.push(['Folge', 'Gleich schwerer Meteorit folgt']);
+    else rows.push(['Folge', 'Neustart bei Stufe 1']);      // Einschlag setzt die Stufe zurück
+    rows.push(['Rekord', 'Stufe ' + r.best]);
     $('repBody').innerHTML = rows.map(([a, b]) => `<span class="muted">${a}</span><b>${b}</b>`).join('');
   }
 
