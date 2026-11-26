@@ -150,3 +150,6 @@ main { flex: 1; display: flex; min-height: 0; }
 #feed small { display: block; color: var(--muted); font-size: 11px; }
 @keyframes feedlife { 0% { opacity: 0; transform: translateX(-12px); } 6% { opacity: 1; transform: none; } 80% { opacity: 1; } 100% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { #feed div { animation-duration: 5s; } }
+
+/* Kaufmenge-Umschalter über den Shop-Listen */
+.modebar { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--panel); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }

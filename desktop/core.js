@@ -299,6 +299,37 @@
     return res;
   }
 
+  /** Wie viele Bots vom Typ i kann man (bis zu 'limit' Stück) kaufen, und was kostet das zusammen?
+      n = Anzahl, cost = Gesamtpreis. Bei n = 0 ist cost der Preis des nächsten Bots. */
+  function bulkBots(s, i, limit) {
+    let n = 0, cost = 0, next = botCost(s, i);
+    const g = CFG.botCostGrowth;
+    for (let k = 0; k < Math.min(limit, 5000); k++) {
+      const c = botCost(s, i) * Math.pow(g, k);         // Preis des (k+1)-ten Bots
+      if (cost + c > s.dm) { return n ? { n, cost } : { n: 0, cost: c }; }
+      cost += c; n++; next = c;
+    }
+    return { n, cost: n ? cost : next };
+  }
+  /** Dasselbe für mehrstufige Upgrades. priceAt(level) = Preis der Stufe, have = verfügbare Währung. */
+  function bulkLevels(level, max, priceAt, have, limit) {
+    let n = 0, cost = 0;
+    while (level + n < max && n < limit) {
+      const c = priceAt(level + n);
+      if (cost + c > have) break;
+      cost += c; n++;
+    }
+    return n ? { n, cost } : { n: 0, cost: level < max ? priceAt(level) : 0 };
+  }
+  function bulkSpecial(s, id, limit) {
+    const d = SPECIAL.find((x) => x.id === id);
+    return bulkLevels(s.special[id] || 0, d.max, (l) => d.cost[l], s.iridium, limit);
+  }
+  function bulkFp(s, id, limit) {
+    const d = FP_SHOP.find((x) => x.id === id);
+    return bulkLevels(lvl(s, id), d.max, d.cost, s.fp, limit);
+  }
+
   function buyBot(s, i) {
     if (s.phase !== 'shop') return false;
     const c = botCost(s, i);
@@ -368,7 +399,7 @@
 
   root.Core = {
     CFG, CLASSES, levelInfo, BOTS, UPGRADES, SPECIAL, FP_SHOP,
-    newState, startMeteor, tick, buyBot, buyUpgrade, buySpecial, buyFp, prestige,
+    newState, startMeteor, tick, bulkBots, bulkSpecial, bulkFp, buyBot, buyUpgrade, buySpecial, buyFp, prestige,
     botCost, baseRate, currentRate, timeLimit, prestigeUnlocked, prestigeGain, prestigeMult,
     reserveAmount, makeMeteor, serialize, deserialize, fmtMass, fmtNum, fmtTime
   };

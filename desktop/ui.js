@@ -95,10 +95,26 @@
   }
   $('tabs').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) showTab(b.dataset.tab); });
 
+  // Kaufmenge: 1, 10 oder Max (Infinity). Wird gemerkt.
+  let buyMode = 1;
+  try { const m = localStorage.getItem('federgewicht.buymode'); buyMode = m === 'max' ? Infinity : (+m === 10 ? 10 : 1); } catch (e) { /* kein Speicher */ }
+  function showBuyMode() {
+    document.querySelectorAll('#buyMode [data-mode]').forEach((b) => b.classList.toggle('on', (b.dataset.mode === 'max' ? Infinity : +b.dataset.mode) === buyMode));
+  }
+  $('buyMode').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    buyMode = b.dataset.mode === 'max' ? Infinity : +b.dataset.mode;
+    try { localStorage.setItem('federgewicht.buymode', b.dataset.mode); } catch (err) { /* ignorieren */ }
+    showBuyMode(); updateShops();
+  });
+  showBuyMode();
+  /** Label für Sammelkäufe: "×5 · 120 kg" bzw. nur der Preis bei Einzelkauf. */
+  const bulkLabel = (r, fmt) => (r.n > 1 ? `×${r.n} · ` : '') + fmt(r.cost);
+
   // Kaufen: ein Listener für alle Knöpfe (Event-Delegation). Shift+Klick = bis zu 10 Käufe.
   $('lists').addEventListener('click', (e) => {
     const b = e.target.closest('button.buy'); if (!b) return;
-    const { kind, id } = b.dataset, times = e.shiftKey ? 10 : 1;
+    const { kind, id } = b.dataset, times = kind === 'upg' ? 1 : Math.min(buyMode === 1 && e.shiftKey ? 10 : buyMode, 5000);   // Shift+Klick = ×10, solange ×1 gewählt ist
     let ok = false;
     for (let k = 0; k < times; k++) {
       let r = false;
@@ -134,8 +150,9 @@
       setText(q.name, b.name); setText(q.desc, b.desc);
       setText(q.stat, `je ${rate(each)} · gesamt ${rate(each * S.bots[i])}`);
       setText(q.owned, String(S.bots[i]));
-      setText(q.buy, C.fmtMass(cost));
-      q.buy.disabled = !shopOpen || S.dm < cost;
+      const bulk = C.bulkBots(S, i, buyMode);
+      setText(q.buy, bulkLabel(bulk, C.fmtMass));
+      q.buy.disabled = !shopOpen || bulk.n < 1;
     });
 
     // --- Upgrades
@@ -158,8 +175,9 @@
       setText(q.name, d.name); setText(q.desc, d.desc(Math.max(1, l + (maxed ? 0 : 1))) + (maxed ? '' : ' (nächste Stufe)'));
       setText(q.stat, l > 0 ? `aktuell: ${d.desc(l)}` : '');
       setText(q.owned, `${l}/${d.max}`);
-      setText(q.buy, maxed ? 'MAX' : d.cost[l] + ' Iridium');
-      q.buy.disabled = !shopOpen || maxed || S.iridium < d.cost[l];
+      const bulk = C.bulkSpecial(S, d.id, buyMode);
+      setText(q.buy, maxed ? 'MAX' : bulkLabel(bulk, (c) => c + ' Iridium'));
+      q.buy.disabled = !shopOpen || maxed || bulk.n < 1;
     });
 
     // --- Prestige
@@ -183,8 +201,9 @@
       setText(q.desc, d.desc(maxed ? l : l + 1) + (maxed ? '' : ' (nächste Stufe)'));
       setText(q.stat, l > 0 ? `aktuell: ${d.desc(l)}` : '');
       setText(q.owned, `${l}/${d.max}`);
-      setText(q.buy, maxed ? 'MAX' : d.cost(l) + ' Forschung');
-      q.buy.disabled = maxed || S.fp < d.cost(l);   // FP-Shop ist auch im Kampf nutzbar
+      const bulk = C.bulkFp(S, d.id, buyMode);
+      setText(q.buy, maxed ? 'MAX' : bulkLabel(bulk, (c) => c + ' Forschung'));
+      q.buy.disabled = maxed || bulk.n < 1;   // FP-Shop ist auch im Kampf nutzbar
     });
     $('lock').hidden = shopOpen || tab === 'pres';
     $('side').classList.toggle('locked', !shopOpen);
@@ -245,6 +264,7 @@
       bt.style.background = frac < 0.25 ? 'var(--bad)' : frac < 0.5 ? 'var(--warn)' : 'var(--ok)';
       const [ft] = forecastText(forecast(C.currentRate(S), m)); setText($('mForecast'), ft);
       // Entfernung: startet bei ~384.400 km (Mondentfernung) und sinkt mit der Restzeit auf 0
+      setText($('mSite'), m.site ? regionName(m.site) : '–');
       setText($('mDist'), Math.round(384400 * Math.max(0, m.timeLeft) / m.time).toLocaleString('de-DE') + ' km');
     } else {
       // Vorschau: Jeder Lauf beginnt wieder beim leichtesten Objekt
@@ -288,12 +308,14 @@
   /* ------------------------------------------------------ 4. Szene (Canvas) */
   const cv = $('scene'), ctx = cv.getContext('2d');
   let W = 0, H = 0, DPR = 1;
+  let bgDirty = true;       // Hintergrund neu aufbauen? (nach Größenänderung)
   function resize() {
     DPR = window.devicePixelRatio || 1;
     const r = cv.getBoundingClientRect();
     W = r.width; H = r.height;
     cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    bgDirty = true;
   }
   new ResizeObserver(resize).observe(cv); resize();
 
@@ -301,7 +323,6 @@
   function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 
   const R = rng(7);
-  const stars = Array.from({ length: 220 }, () => ({ x: R(), y: R() * 0.95, r: R() * 1.2 + 0.2, a: R() * 0.6 + 0.3, ph: R() * 6.28 }));
 
   // Gestalt eines Gesteinsbrockens: unregelmäßiges Vieleck + Krater, aus der Nummer erzeugt
   const shapeCache = {};
@@ -326,6 +347,7 @@
   let spawnT = 1;        // 0..1: Einblenden eines neuen Objekts
   let earthT = 1;        // 0..1: Erde (neu) erscheinen lassen
   let lastPos = { x: 0, y: 0, r: 20 };
+  let lastSite = { lon: 0, tilt: 0.4 };   // Einschlagsregion des aktuellen Objekts (für die Explosion)
   const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
 
   function spawn(x, y, n, speedMax, colors, life, size) {
@@ -342,27 +364,56 @@
 
   /* ---- Die Erde: echte Kontinent-Umrisse (grob, als [Längengrad, Breitengrad]) auf eine drehende Kugel projiziert ---- */
   const CONTINENTS = [
-    { c: '#5f8f4a', p: [[-168,66],[-150,71],[-125,72],[-95,73],[-80,68],[-62,58],[-55,50],[-67,45],[-76,38],[-81,30],[-80,25],[-90,29],[-97,26],[-97,20],[-88,16],[-83,10],[-78,8],[-86,12],[-93,16],[-105,20],[-112,28],[-118,34],[-124,42],[-125,50],[-135,58],[-150,60],[-165,62]] },   // Nordamerika
-    { c: '#3f8040', p: [[-78,8],[-72,12],[-62,10],[-52,5],[-50,0],[-35,-6],[-39,-15],[-48,-26],[-58,-38],[-65,-42],[-68,-52],[-72,-54],[-75,-45],[-73,-30],[-70,-18],[-76,-12],[-81,-5],[-79,2]] },                                                                                    // Südamerika
-    { c: '#eef3f6', p: [[-73,78],[-55,83],[-25,83],[-20,72],[-40,62],[-50,64],[-60,70]] },                                                                                                                                                                                                    // Grönland
-    { c: '#6c9650', p: [[-10,36],[-9,43],[-2,48],[-5,52],[5,53],[8,57],[12,55],[20,60],[25,65],[30,70],[45,68],[70,73],[100,77],[130,72],[160,70],[180,68],[180,62],[160,58],[142,53],[135,44],[125,38],[122,30],[110,20],[106,10],[100,2],[98,9],[92,20],[80,15],[77,8],[72,20],[66,25],[57,25],[50,30],[44,13],[35,28],[36,36],[28,36],[20,40],[15,38],[12,44],[3,43],[-5,36]] }, // Eurasien
-    { c: '#b8a05c', p: [[-17,21],[-10,30],[-5,36],[10,37],[20,33],[32,31],[35,28],[43,12],[51,12],[40,-5],[40,-15],[33,-26],[20,-35],[15,-28],[12,-15],[9,-1],[8,5],[-8,4],[-17,14]] },                                                                                        // Afrika
-    { c: '#c98a52', p: [[114,-22],[122,-18],[131,-12],[137,-12],[142,-11],[146,-19],[153,-26],[150,-37],[140,-38],[130,-32],[115,-34]] },                                                                                                                                                      // Australien
-    { c: '#5f8f4a', p: [[-6,50],[2,51],[-2,58],[-6,56]] },                                                                                                                                                                                                                                     // Großbritannien
-    { c: '#6c9650', p: [[130,31],[141,36],[142,44],[140,41],[132,34]] },                                                                                                                                                                                                                       // Japan
-    { c: '#3f8040', p: [[95,5],[106,-6],[115,-8],[120,-2],[108,3]] }                                                                                                                                                                                                                          // Indonesien
+    { n: 'Nordamerika', c: '#5f8f4a', p: [[-168,66],[-150,71],[-125,72],[-95,73],[-80,68],[-62,58],[-55,50],[-67,45],[-76,38],[-81,30],[-80,25],[-90,29],[-97,26],[-97,20],[-88,16],[-83,10],[-78,8],[-86,12],[-93,16],[-105,20],[-112,28],[-118,34],[-124,42],[-125,50],[-135,58],[-150,60],[-165,62]] },   // Nordamerika
+    { n: 'Südamerika', c: '#3f8040', p: [[-78,8],[-72,12],[-62,10],[-52,5],[-50,0],[-35,-6],[-39,-15],[-48,-26],[-58,-38],[-65,-42],[-68,-52],[-72,-54],[-75,-45],[-73,-30],[-70,-18],[-76,-12],[-81,-5],[-79,2]] },                                                                                    // Südamerika
+    { n: 'Grönland', c: '#eef3f6', p: [[-73,78],[-55,83],[-25,83],[-20,72],[-40,62],[-50,64],[-60,70]] },                                                                                                                                                                                                    // Grönland
+    { n: 'Eurasien', c: '#6c9650', p: [[-10,36],[-9,43],[-2,48],[-5,52],[5,53],[8,57],[12,55],[20,60],[25,65],[30,70],[45,68],[70,73],[100,77],[130,72],[160,70],[180,68],[180,62],[160,58],[142,53],[135,44],[125,38],[122,30],[110,20],[106,10],[100,2],[98,9],[92,20],[80,15],[77,8],[72,20],[66,25],[57,25],[50,30],[44,13],[35,28],[36,36],[28,36],[20,40],[15,38],[12,44],[3,43],[-5,36]] }, // Eurasien
+    { n: 'Afrika', c: '#b8a05c', p: [[-17,21],[-10,30],[-5,36],[10,37],[20,33],[32,31],[35,28],[43,12],[51,12],[40,-5],[40,-15],[33,-26],[20,-35],[15,-28],[12,-15],[9,-1],[8,5],[-8,4],[-17,14]] },                                                                                        // Afrika
+    { n: 'Australien', c: '#c98a52', p: [[114,-22],[122,-18],[131,-12],[137,-12],[142,-11],[146,-19],[153,-26],[150,-37],[140,-38],[130,-32],[115,-34]] },                                                                                                                                                      // Australien
+    { n: 'Großbritannien', c: '#5f8f4a', p: [[-6,50],[2,51],[-2,58],[-6,56]] },                                                                                                                                                                                                                                     // Großbritannien
+    { n: 'Japan', c: '#6c9650', p: [[130,31],[141,36],[142,44],[140,41],[132,34]] },                                                                                                                                                                                                                       // Japan
+    { n: 'Indonesien', c: '#3f8040', p: [[95,5],[106,-6],[115,-8],[120,-2],[108,3]] }                                                                                                                                                                                                                          // Indonesien
   ];
   const TILT = 0.4;          // Neigung der Erdachse
   /** Punkt (Längengrad, Breitengrad) -> Position auf der Kugelscheibe. z>0 heißt: Vorderseite sichtbar. */
-  function project(lon, lat, lon0) {
+  function project(lon, lat, lon0, tilt) {
+    const T = tilt === undefined ? TILT : tilt;
     const lo = (lon - lon0) * Math.PI / 180, la = lat * Math.PI / 180;
     const x = Math.cos(la) * Math.sin(lo), y0 = Math.sin(la), z0 = Math.cos(la) * Math.cos(lo);
-    const y = y0 * Math.cos(TILT) - z0 * Math.sin(TILT), z = y0 * Math.sin(TILT) + z0 * Math.cos(TILT);
+    const y = y0 * Math.cos(T) - z0 * Math.sin(T), z = y0 * Math.sin(T) + z0 * Math.cos(T);
     return { x, y, z };
+  }
+
+  /* ---- Einschlagsorte: Jedes Objekt trifft eine andere, zufällige Region der Erde. ---- */
+  /** Zufällige Ausrichtung der Erde: Längengrad, der am Ende oben liegt, und Achsenneigung. */
+  // Der Neigungswinkel bestimmt, welche Breite oben liegt: ~+0,3 = hoher Norden, ~-1,5 = Äquator, ~-2,7 = Süden. Gleichverteilt = bunte Mischung.
+  function randomSite() { return { lon: Math.random() * 360 - 180, tilt: -2.7 + Math.random() * 3.0 }; }
+  /** Welcher Punkt der Erde liegt direkt unter dem Objekt (oberster Punkt der Scheibe)? Gibt Länge/Breite zurück. */
+  function impactPoint(site) {
+    const y = 0.96, z = Math.sqrt(1 - y * y);                    // knapp unter dem oberen Rand der Kugelscheibe
+    const y0 = y * Math.cos(site.tilt) + z * Math.sin(site.tilt), z0 = -y * Math.sin(site.tilt) + z * Math.cos(site.tilt);
+    let lon = site.lon + (z0 >= 0 ? 0 : 180); lon = ((lon + 540) % 360) - 180;
+    return { lon, lat: Math.asin(Math.max(-1, Math.min(1, y0))) * 180 / Math.PI };
+  }
+  function inPoly(lon, lat, poly) {                              // Strahlverfahren: Punkt im Polygon?
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const [xi, yi] = poly[i], [xj, yj] = poly[j];
+      if ((yi > lat) !== (yj > lat) && lon < (xj - xi) * (lat - yi) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  }
+  /** Name der Region unter dem Einschlag, z. B. "Afrika" oder "Pazifik". */
+  function regionName(site) {
+    const { lon, lat } = impactPoint(site);
+    for (const k of CONTINENTS) if (inPoly(lon, lat, k.p)) return k.n === 'Eurasien' ? (lon < 60 && lat > 35 ? 'Europa' : 'Asien') : k.n;
+    if (lat > 72) return 'Arktis';
+    if (lat < -62) return 'Antarktis';
+    return lon >= -80 && lon < 20 ? 'Atlantik' : lon >= 20 && lon < 145 ? 'Indischer Ozean' : 'Pazifik';
   }
   const cloudSeeds = Array.from({ length: 16 }, () => ({ lon: R() * 360 - 180, lat: R() * 140 - 70, w: 0.1 + R() * 0.16, sp: 0.8 + R() * 0.8 }));
 
-  function drawEarth(e, alpha) {
+  function drawEarth(e, alpha, lon0, tilt) {
     ctx.save(); ctx.globalAlpha = alpha;
     // Atmosphärenschein
     let g = ctx.createRadialGradient(e.x, e.y, e.r * 0.98, e.x, e.y, e.r * 1.12);
@@ -374,7 +425,6 @@
     ctx.fillStyle = g; ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, 6.2832); ctx.fill();
 
     ctx.save(); ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, 6.2832); ctx.clip();
-    const lon0 = clock * 4;                                     // Erde dreht sich (Grad pro Sekunde)
     // Kontinente: jede Kante wird in kleine Schritte zerlegt, damit sie auf der Kugel schön rund wirken.
     // Punkte auf der Rückseite werden an den Rand geklemmt, so bleibt die Form am Horizont geschlossen.
     CONTINENTS.forEach((k) => {
@@ -383,7 +433,7 @@
         const a = k.p[i], b = k.p[(i + 1) % k.p.length];
         const n = Math.max(1, Math.ceil(Math.max(Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1])) / 5));
         for (let s = 0; s < n; s++) {
-          const q = project(a[0] + (b[0] - a[0]) * s / n, a[1] + (b[1] - a[1]) * s / n, lon0);
+          const q = project(a[0] + (b[0] - a[0]) * s / n, a[1] + (b[1] - a[1]) * s / n, lon0, tilt);
           if (q.z > 0) front++;
           if (q.z < 0) { const h = Math.hypot(q.x, q.y) || 1; q.x /= h; q.y /= h; }
           pts.push(q);
@@ -394,17 +444,18 @@
       ctx.closePath(); ctx.fillStyle = k.c; ctx.fill();
       ctx.strokeStyle = 'rgba(15,35,20,.45)'; ctx.lineWidth = Math.max(1, e.r * 0.004); ctx.stroke();
     });
-    // Nordpolkappe: weiche, perspektivisch verkürzte Ellipse am Pol (je flacher man draufschaut, desto flacher)
-    const pole = project(0, 90, 0);
-    if (pole.z > 0.02) {
+    // Polkappen (Nord und Süd): weiche, perspektivisch verkürzte Ellipse am jeweiligen Pol; nur sichtbar, wenn der Pol uns zugewandt ist
+    [90, -90].forEach((plat) => {
+      const pole = project(0, plat, 0, tilt);
+      if (pole.z <= 0.02) return;
       ctx.save(); ctx.translate(e.x, e.y - pole.y * e.r); ctx.scale(1, pole.z);
       const cg = ctx.createRadialGradient(0, 0, e.r * 0.05, 0, 0, e.r * 0.3);
       cg.addColorStop(0, 'rgba(245,250,255,.95)'); cg.addColorStop(0.7, 'rgba(235,243,250,.85)'); cg.addColorStop(1, 'rgba(235,243,250,0)');
       ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(0, 0, e.r * 0.3, 0, 6.2832); ctx.fill(); ctx.restore();
-    }
+    });
     // Wolken, die langsamer/anders ziehen als die Erde
     cloudSeeds.forEach((c) => {
-      const q = project(c.lon + clock * c.sp, c.lat, lon0 * 0.9);
+      const q = project(c.lon + clock * c.sp, c.lat, lon0 * 0.9, tilt);
       if (q.z <= 0.05) return;
       ctx.fillStyle = `rgba(255,255,255,${0.22 * Math.min(1, q.z * 2)})`;
       ctx.beginPath(); ctx.ellipse(e.x + q.x * e.r, e.y - q.y * e.r, e.r * c.w * (0.4 + q.z * 0.6), e.r * c.w * 0.3 * (0.4 + q.z * 0.6), -q.x * 0.5, 0, 6.2832); ctx.fill();
@@ -421,11 +472,84 @@
     ctx.restore();
   }
 
-  function drawStars(t) {
-    stars.forEach((s) => {
-      const a = s.a * (0.75 + 0.25 * Math.sin(t * 0.8 + s.ph));
-      ctx.fillStyle = `rgba(220,230,255,${a})`;
-      ctx.fillRect(s.x * W, s.y * H, s.r, s.r);
+  /* ---- Hintergrund: Milchstraße und Sterne in drei Tiefenebenen (Parallaxe) und die Sonne ---- */
+  const bgLayers = { far: null, mid: null };        // vorgerenderte Ebenen (werden bei Größenänderung neu gebaut)
+  const PAD = 260;                                  // Überhöhe der Ebenen, damit sie beim Verschieben nie enden
+  function layerCanvas() {
+    const c = document.createElement('canvas'); c.width = Math.round(W * DPR); c.height = Math.round((H + PAD) * DPR);
+    const g = c.getContext('2d'); g.setTransform(DPR, 0, 0, DPR, 0, 0); return [c, g];
+  }
+  const NEAR = Array.from({ length: 34 }, () => ({ x: R(), y: R(), r: R() * 1.1 + 0.9, ph: R() * 6.28, spike: R() < 0.25, tint: R() < 0.5 ? '210,225,255' : '255,232,200' }));
+  function buildBackground() {
+    bgDirty = false;
+    const rr = rng(2026), TW = H + PAD;
+    // --- ferne Ebene: Milchstraßenband aus Nebel und sehr vielen winzigen Sternen
+    let [c, g] = layerCanvas(); bgLayers.far = c;
+    g.save(); g.translate(W * 0.55, TW * 0.45); g.rotate(-0.55);
+    const band = g.createLinearGradient(0, -H * 0.3, 0, H * 0.3);
+    band.addColorStop(0, 'rgba(110,120,190,0)'); band.addColorStop(0.5, 'rgba(120,130,200,.16)'); band.addColorStop(1, 'rgba(110,120,190,0)');
+    g.fillStyle = band; g.fillRect(-W * 1.2, -H * 0.3, W * 2.4, H * 0.6);
+    for (let i = 0; i < 14; i++) {                  // weiche Nebelwolken im Band (rötlich und bläulich)
+      const x = (rr() - 0.5) * W * 1.6, y = (rr() - 0.5) * H * 0.3, s = H * (0.12 + rr() * 0.2);
+      const ng = g.createRadialGradient(x, y, 0, x, y, s);
+      ng.addColorStop(0, rr() < 0.5 ? 'rgba(170,110,170,.07)' : 'rgba(100,140,210,.07)'); ng.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = ng; g.fillRect(x - s, y - s, s * 2, s * 2);
+    }
+    g.restore();
+    for (let i = 0; i < 900; i++) {                 // Sterne, zu 60 % im Band zusammengedrängt
+      let x = rr() * W, y = rr() * TW;
+      if (rr() < 0.6) { const u = (rr() - 0.5) * W * 1.6, v = (rr() + rr() + rr() - 1.5) * H * 0.16; x = W * 0.55 + u * Math.cos(-0.55) - v * Math.sin(-0.55); y = TW * 0.45 + u * Math.sin(-0.55) + v * Math.cos(-0.55); }
+      g.fillStyle = `rgba(225,232,255,${0.15 + rr() * 0.45})`; g.fillRect(x, y, 0.5 + rr() * 0.7, 0.5 + rr() * 0.7);
+    }
+    // --- mittlere Ebene: hellere, leicht farbige Sterne
+    [c, g] = layerCanvas(); bgLayers.mid = c;
+    for (let i = 0; i < 170; i++) {
+      const x = rr() * W, y = rr() * TW, s = 0.6 + rr() * 0.9, warm = rr();
+      g.fillStyle = warm < 0.2 ? `rgba(255,210,170,${0.5 + rr() * 0.4})` : warm < 0.4 ? `rgba(180,205,255,${0.5 + rr() * 0.4})` : `rgba(235,240,255,${0.45 + rr() * 0.45})`;
+      g.beginPath(); g.arc(x, y, s, 0, 6.2832); g.fill();
+    }
+  }
+  function drawSun(par) {
+    // Die Sonne steht weit links; sie ist klein, aber hell, mit Korona, langsam drehenden Strahlen und schwachen Linsenreflexen.
+    const sx = W * 0.1, sy = H * 0.42 - par * 12, pulse = 1 + 0.03 * Math.sin(clock * 1.3), R0 = H * 0.034 * pulse;
+    let g = ctx.createRadialGradient(sx, sy, 0, sx, sy, H * 0.62);
+    g.addColorStop(0, 'rgba(255,214,150,.30)'); g.addColorStop(0.35, 'rgba(255,170,100,.09)'); g.addColorStop(1, 'rgba(255,150,80,0)');
+    ctx.fillStyle = g; ctx.fillRect(sx - H * 0.62, sy - H * 0.62, H * 1.24, H * 1.24);
+    ctx.save(); ctx.translate(sx, sy); ctx.rotate(clock * 0.03);
+    for (let i = 0; i < 14; i++) {                   // lange, dünne Strahlen
+      ctx.rotate(6.2832 / 14); const L = H * (0.18 + 0.1 * ((i * 7) % 5) / 5);
+      const rg = ctx.createLinearGradient(0, 0, L, 0); rg.addColorStop(0, 'rgba(255,230,180,.16)'); rg.addColorStop(1, 'rgba(255,230,180,0)');
+      ctx.fillStyle = rg; ctx.beginPath(); ctx.moveTo(R0, -R0 * 0.18); ctx.lineTo(L, 0); ctx.lineTo(R0, R0 * 0.18); ctx.fill();
+    }
+    ctx.restore();
+    g = ctx.createRadialGradient(sx, sy, R0 * 0.8, sx, sy, R0 * 3.2);
+    g.addColorStop(0, 'rgba(255,240,200,.85)'); g.addColorStop(1, 'rgba(255,190,110,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx, sy, R0 * 3.2, 0, 6.2832); ctx.fill();
+    g = ctx.createRadialGradient(sx - R0 * 0.2, sy - R0 * 0.2, 0, sx, sy, R0);
+    g.addColorStop(0, '#fffdf0'); g.addColorStop(0.6, '#fff0b8'); g.addColorStop(1, '#ffd070');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx, sy, R0, 0, 6.2832); ctx.fill();
+    // Linsenreflexe: blasse Ringe auf der Linie von der Sonne zur Bildmitte
+    [[0.25, 0.05, '255,200,140'], [0.5, 0.08, '160,200,255'], [0.78, 0.04, '255,170,200']].forEach(([k, s, col]) => {
+      const fx = sx + (W * 0.5 - sx) * k * 1.6, fy = sy + (H * 0.45 - sy) * k * 1.6;
+      ctx.strokeStyle = `rgba(${col},.06)`; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(fx, fy, H * s, 0, 6.2832); ctx.stroke();
+    });
+  }
+  /** Zeichnet den gesamten Hintergrund. p = Anflugfortschritt (0..1): Ebenen rutschen unterschiedlich schnell nach oben -> Tiefe. */
+  function drawBackground(p) {
+    if (bgDirty || !bgLayers.far) buildBackground();
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, '#02030a'); grad.addColorStop(1, '#070b18');
+    ctx.fillStyle = grad; ctx.fillRect(-100, -100, W + 200, H + 200);
+    ctx.drawImage(bgLayers.far, 0, -p * 40 - 0, W, H + PAD);
+    drawSun(p);
+    ctx.drawImage(bgLayers.mid, 0, -p * 110, W, H + PAD);
+    // nahe Sterne: hell, funkelnd, manche mit Kreuz-Strahlen; bewegen sich am stärksten
+    NEAR.forEach((s) => {
+      const y = ((s.y * H - p * 230) % H + H) % H, x = s.x * W, tw = 0.65 + 0.35 * Math.sin(clock * 1.4 + s.ph);
+      const g = ctx.createRadialGradient(x, y, 0, x, y, s.r * 5);
+      g.addColorStop(0, `rgba(${s.tint},${0.9 * tw})`); g.addColorStop(1, `rgba(${s.tint},0)`);
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, s.r * 5, 0, 6.2832); ctx.fill();
+      if (s.spike) { ctx.strokeStyle = `rgba(${s.tint},${0.5 * tw})`; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x - s.r * 7, y); ctx.lineTo(x + s.r * 7, y); ctx.moveTo(x, y - s.r * 7); ctx.lineTo(x, y + s.r * 7); ctx.stroke(); }
     });
   }
 
@@ -521,32 +645,40 @@
     }
   }
 
-  /** Geschwindigkeitszeichen: geschwungene Wischer um das Objekt und Fall-Streifen darüber (wie im Comic). */
-  function swoosh(rad, a0, a1, alpha, w) {
-    // Bogen in 7 Stücken, die zum Ende hin verblassen und dünner werden -> läuft spitz zu
-    const n = 7;
-    for (let i = 0; i < n; i++) {
-      const k = i / n, aa = a0 + (a1 - a0) * k, ab = a0 + (a1 - a0) * (k + 1 / n);
-      ctx.strokeStyle = `rgba(255,255,255,${alpha * (1 - k)})`; ctx.lineWidth = Math.max(1, w * (1 - k * 0.8));
-      ctx.beginPath(); ctx.arc(0, 0, rad, Math.min(aa, ab) - 0.02, Math.max(aa, ab) + 0.02); ctx.stroke();   // immer der kurze Weg, egal in welche Richtung
-    }
+  /** Sichel-förmiger "Wischer": in der Mitte dick, an beiden Enden spitz. Sitzt auf einem Kreis mit Radius rad
+      um das Objekt, Mitte bei Winkel a, Öffnungswinkel span, Dicke thick (alles in Pixeln/Bogenmaß). */
+  function crescent(rad, a, span, thick, alpha) {
+    const pt = (ang, rr) => ({ x: Math.cos(ang) * rr, y: Math.sin(ang) * rr });
+    const p0 = pt(a - span / 2, rad), p1 = pt(a + span / 2, rad), cm = pt(a, rad * Math.cos(span / 2));  // cm = Mitte der Sehne
+    // Quadratische Kurve: Kontrollpunkt so wählen, dass ihre Mitte genau auf dem gewünschten Radius liegt
+    const ctrl = (rr) => { const m = pt(a, rr); return { x: 2 * m.x - cm.x, y: 2 * m.y - cm.y }; };
+    const co = ctrl(rad + thick / 2), ci = ctrl(rad - thick / 2);
+    const g = ctx.createLinearGradient(p0.x, p0.y, p1.x, p1.y);
+    g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(0.5, `rgba(255,255,255,${alpha})`); g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.quadraticCurveTo(co.x, co.y, p1.x, p1.y); ctx.quadraticCurveTo(ci.x, ci.y, p0.x, p0.y); ctx.fill();
   }
+  /** Strömungslinie: dünnes, spitz zulaufendes Dreieck. Dick am Objekt, läuft nach oben (gegen die Flugrichtung) aus. */
+  function streak(x, y, len, w, alpha) {
+    const g = ctx.createLinearGradient(0, y, 0, y - len);
+    g.addColorStop(0, `rgba(255,255,255,${alpha})`); g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(x - w / 2, y); ctx.lineTo(x + w / 2, y); ctx.lineTo(x, y - len); ctx.closePath(); ctx.fill();
+  }
+  /** Geschwindigkeitszeichen (wie im Comic, ganz ohne Schrift):
+      - Strömungslinien seitlich und oberhalb des fallenden Objekts, deren Länge pulsiert
+      - Sicheln, die an der Unterseite entstehen und an den Seiten entlang nach oben gleiten (Luft teilt sich) */
   function drawSpeedMarks(r, intensity) {
-    ctx.save(); ctx.lineCap = 'round';
-    // Fall-Streifen: laufen von oben nach unten durch, unterschiedlich lang
-    for (let i = 0; i < 9; i++) {
-      const x = (((i * 0.6180339) % 1) * 2 - 1) * r * 1.15;
-      const len = r * (0.5 + ((i * 0.37) % 0.9)), off = ((clock * (1.8 + (i % 3) * 0.7) + i * 0.31) % 1);
-      const y0 = -r * 2.2 + off * r * 2.6;
-      const g = ctx.createLinearGradient(0, y0, 0, y0 + len);
-      g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(1, `rgba(255,255,255,${0.35 * intensity})`);
-      ctx.strokeStyle = g; ctx.lineWidth = Math.max(1.5, r * 0.02);
-      ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y0 + len); ctx.stroke();
+    ctx.save();
+    for (let i = 0; i < 12; i++) {
+      const side = i % 2 ? 1 : -1, x = side * r * (0.8 + ((i * 0.37) % 0.7));
+      const y = -r * (0.15 + ((i * 0.53) % 0.9)), pulse = 0.5 + 0.5 * Math.sin(clock * 5 + i * 1.7);
+      streak(x, y, r * (0.7 + 0.9 * pulse), Math.max(2, r * 0.035), 0.55 * intensity);
     }
-    // Wischer-Bögen, die um das Objekt kreisen
+    // Vier kurze, kräftige Sicheln: Jede entsteht unten seitlich vom Objekt, gleitet an der Seite nach oben und blendet aus.
     for (let i = 0; i < 4; i++) {
-      const a = clock * (1.6 + i * 0.2) * (i % 2 ? -1 : 1) + i * 1.6;
-      swoosh(r * (1.3 + (i % 2) * 0.18), a, a + 0.9 * (i % 2 ? -1 : 1), 0.55 * intensity, r * 0.035);
+      const ph = ((clock / 0.9) + i / 4) % 1, side = i % 2 ? 1 : -1;
+      const ang = Math.PI / 2 - side * (0.5 + ph * 1.5);                              // von schräg unten (+60°) bis zur Seite oben (-30°)
+      crescent(r * (1.18 + 0.1 * ph), ang, 0.55, r * 0.12, 0.85 * Math.sin(ph * Math.PI) * intensity);
     }
     ctx.restore();
   }
@@ -620,7 +752,7 @@
       chunks.push({ x, y, vx: Math.cos(dir) * sp, vy: Math.sin(dir) * sp - 150, rot: Math.random() * 6, vr: (Math.random() - 0.5) * 12,
                     color, poly: Array.from({ length: n }, (_, j) => { const aa = j / n * 6.2832, rr = size * (0.6 + Math.random() * 0.6); return [Math.cos(aa) * rr, Math.sin(aa) * rr]; }) });
     }
-    boom = { t: 0, e, P, chunks, bursts: [], nextBurst: 0, quip: pick(BOOM_QUIPS), what: label(res) };
+    boom = { t: 0, e, P, chunks, bursts: [], nextBurst: 0, quip: pick(BOOM_QUIPS), what: label(res), where: regionName(lastSite) };
     spawn(P.x, P.y, 700, 1100, ['#fff3c4', '#ffb02e', '#ff6a1a', '#7a2a10', '#d9d2c4'], 3.4, 4);
     [[0, 1.4, '255,230,170'], [0.12, 1.8, '255,140,60'], [0.3, 2.3, '255,255,255'], [0.55, 2.8, '255,90,40']].forEach(([delay, s, col], i) =>
       setTimeout(() => rings.push({ x: P.x, y: P.y, r: Math.max(W, H) * s * 0.55, life: 1.8 + i * 0.3, col, sq: 0.8 }), delay * 1000));
@@ -665,7 +797,7 @@
       ctx.fillStyle = '#ffb02e'; ctx.fillText('BUMM!', 0, 0);
       ctx.font = `600 ${Math.round(Math.max(15, H * 0.032))}px -apple-system, "Segoe UI", sans-serif`;
       ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(0,0,0,.85)';
-      const l1 = `${b.what} trifft die Erde.`;
+      const l1 = `${b.what} trifft ${b.where}.`;
       ctx.strokeText(l1, 0, H * 0.13); ctx.fillStyle = '#fff'; ctx.fillText(l1, 0, H * 0.13);
       ctx.strokeText(b.quip, 0, H * 0.18); ctx.fillStyle = '#ffd9a0'; ctx.fillText(b.quip, 0, H * 0.18);
       ctx.restore();
@@ -679,8 +811,7 @@
     clock += dt; bellPulse = Math.max(0, bellPulse - dt * 2.5); spawnT = Math.min(1, spawnT + dt / 0.6); earthT = Math.min(1, earthT + dt / 1.8);
     ctx.save();
     if (shake > 0.1) { ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake); shake *= Math.pow(0.05, dt); }
-    ctx.fillStyle = '#04060b'; ctx.fillRect(-100, -100, W + 200, H + 200);
-    drawStars(clock);
+    drawBackground(S.phase === 'fight' && !boom ? 1 - Math.max(0, S.meteor.timeLeft) / S.meteor.time : 0);
 
     const m = S.meteor, fight = S.phase === 'fight';
     if (!boom) {
@@ -691,7 +822,10 @@
       // Erde: Oberkante steigt von unten bis kurz unter das Objekt, der Radius wächst dabei stark
       const pe = Math.pow(p, 1.4), top = H * 0.9 + (oy + base * 0.62 - H * 0.9) * pe, re = H * 0.12 + (H * 1.6 - H * 0.12) * Math.pow(p, 2.2);
       const ease = 1 - Math.pow(1 - earthT, 3);
-      drawEarth({ x: W * 0.5, y: top + re, r: re }, ease);
+      // Jedes Objekt hat seine eigene Einschlagsregion: die Erde dreht sich gleichmäßig so, dass sie am Ende oben liegt
+      if (!m.site) m.site = randomSite();
+      lastSite = m.site;
+      drawEarth({ x: W * 0.5, y: top + re, r: re }, ease, m.site.lon + (1 - p) * 90 + (fight ? 0 : clock * 3), m.site.tilt);
       const x = ox, y = oy + (fight ? 0 : Math.sin(clock * 0.8) * 5);
       lastPos = { x, y, r };
       const heat = fight ? Math.max(0, (p - 0.55) / 0.45) : 0;
@@ -704,12 +838,12 @@
         if (m.funny) drawSpeedMarks(r, 0.6 + heat * 0.8);                     // Bewegungszeichen bei allen Alltagsobjekten
         if (m.name === 'Fahrrad') {
           // Eigene Zeichnung: dreht sich langsamer, damit man die Klingel sieht; Zielpunkte mitdrehen
-          const sp = clock * 0.7 + Math.sin(clock * 2) * 0.15, c = Math.cos(sp), s_ = Math.sin(sp);
+          const sp = clock * 0.7, c = Math.cos(sp), s_ = Math.sin(sp);
           ctx.save(); ctx.rotate(sp);
           if (heat > 0) { const hg = ctx.createRadialGradient(0, 0, r * 0.2, 0, 0, r * 1.5); hg.addColorStop(0, `rgba(255,190,90,${0.5 * heat})`); hg.addColorStop(1, 'rgba(255,90,20,0)'); ctx.fillStyle = hg; ctx.beginPath(); ctx.arc(0, 0, r * 1.5, 0, 6.2832); ctx.fill(); }
           drawBike(r); ctx.restore();
           targets = BIKE_PARTS.map((q) => ({ x: (q.x * c - q.y * s_) * r, y: (q.x * s_ + q.y * c) * r, bell: q.bell }));
-        } else if (m.funny) drawEmoji(m.emoji, r, spin + Math.sin(clock * 3) * 0.2, heat);
+        } else if (m.funny) drawEmoji(m.emoji, r, spin, heat);
         else drawRock(r, m.n * 31 + 5, spin * 0.3, Math.PI / 2, heat);
         if (fight) drawBots(r, dt, targets);
         ctx.restore();
@@ -824,5 +958,5 @@
   requestAnimationFrame(frame);
 
   // Zum Testen im Browser/Konsole erreichbar
-  window.__game = { get state() { return S; }, Core: C, get boom() { return boom; }, get mineState() { return mineState; } };
+  window.__game = { get state() { return S; }, Core: C, get boom() { return boom; }, get mineState() { return mineState; }, regionName, randomSite };
 })();

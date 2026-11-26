@@ -53,6 +53,7 @@
           <div class="row"><span class="muted">Einschlag in</span><b id="mTime" class="big">–</b></div>
           <div class="bar time"><i id="barTime"></i></div>
           <div class="row"><span class="muted">Entfernung</span><b id="mDist">–</b></div>
+          <div class="row"><span class="muted">Einschlagsort</span><b id="mSite">–</b></div>
           <div class="row"><span class="muted">Prognose</span><b id="mForecast">–</b></div>
         </div>
       </div>
@@ -86,6 +87,10 @@
         <button data-tab="spec" id="tabSpec" hidden>Spezial</button>
         <button data-tab="pres" id="tabPres">Prestige</button>
       </nav>
+      <div id="buyMode" class="modebar" title="Wie viele Stücke pro Klick gekauft werden">
+        <span class="muted">Kaufmenge</span>
+        <div class="seg"><button data-mode="1" class="on">×1</button><button data-mode="10">×10</button><button data-mode="max">Max</button></div>
+      </div>
       <div id="lock" class="lock" hidden>Der Shop ist nur zwischen den Meteoriten geöffnet.</div>
       <div id="lists">
         <div class="list on" id="list-bots"></div>
