@@ -231,7 +231,8 @@
       const bt = $('barTime'); bt.style.width = frac * 100 + '%';
       bt.style.background = frac < 0.25 ? 'var(--bad)' : frac < 0.5 ? 'var(--warn)' : 'var(--ok)';
       const [ft] = forecastText(forecast(C.currentRate(S), m)); setText($('mForecast'), ft);
-      setText($('mineInfo'), `+${C.fmtMass(C.clickPower(S))} pro Klick · Leertaste`);
+      // Entfernung: startet bei ~384.400 km (Mondentfernung) und sinkt mit der Restzeit auf 0
+      setText($('mDist'), Math.round(384400 * Math.max(0, m.timeLeft) / m.time).toLocaleString('de-DE') + ' km');
     } else {
       setText($('nName'), m.name); setText($('nClass'), clsTxt);
       setText($('nMass'), C.fmtMass(m.mass)); setText($('nTime'), C.fmtTime(m.time));
@@ -407,16 +408,26 @@
     // Fortschritt des Anflugs 0 (fern) .. 1 (Einschlag)
     const p = fight ? 1 - Math.max(0, m.timeLeft) / m.time : 0;
     const e = earth();
-    const sx = W * 0.5 + 40, sy = H * 0.3, ex = W * 0.5, ey = e.y - e.r - 10;
-    const pe = Math.pow(p, 1.6);
+    const sx = W * 0.5 + 40, sy = H * 0.08, ex = W * 0.5, ey = e.y - e.r - 10;
+    const pe = Math.pow(p, 1.25);                          // fast gleichmäßig: man sieht ihn wirklich kommen
     const mass = fight ? Math.max(0, m.remaining) / m.mass : 1;
-    const baseR = 26 + (Math.min(W, H) * 0.2 - 26) * pe;   // in der Vorschau schon gut sichtbar
-    const r = baseR * (0.3 + 0.7 * Math.cbrt(mass));          // schrumpft, je mehr abgebaut wurde
+    const baseR = 14 + (Math.min(W, H) * 0.24 - 14) * pe;   // wächst deutlich, je näher er kommt
+    const r = baseR * (0.12 + 0.88 * Math.sqrt(mass));       // schrumpft sichtbar mit dem Abbau
     const x = sx + (ex - sx) * pe, y = sy + (ey - sy) * pe + Math.sin(clock * 0.6) * (fight ? 0 : 3);
     meteorPos = { x, y, r }; lastMass = mass;
     if (r > 1.5) {
       drawRock(x, y, r, m.n * 31 + 5, mass, !fight, fight ? Math.max(0, (p - 0.55) / 0.45) : 0);
-      if (fight) drawBots(x, y, r, dt);
+      if (fight) {
+        drawBots(x, y, r, dt);
+        // Aus dem Brocken lösen sich Trümmer: je höher der Abbau (relativ zur Masse), desto mehr
+        const frac = C.currentRate(S) / m.mass;                  // Anteil der Masse pro Sekunde
+        const perSec = Math.min(45, 3 + 500 * frac);
+        if (Math.random() < perSec * dt) {
+          const a = Math.random() * 6.2832;
+          parts.push({ x: x + Math.cos(a) * r * 0.9, y: y + Math.sin(a) * r * 0.9, vx: Math.cos(a) * (25 + Math.random() * 60),
+                       vy: Math.sin(a) * (25 + Math.random() * 60), life: 1.6, max: 1.6, c: '#7d756a', s: 2 + Math.random() * Math.max(1, r * 0.05) });
+        }
+      }
     }
     // Partikel
     for (let i = parts.length - 1; i >= 0; i--) {
@@ -460,14 +471,6 @@
   function doStart() {
     if (C.startMeteor(S)) { updateHud(); updateShops(); save(); }
   }
-  function doClick(ev) {
-    const got = C.click(S);
-    if (got > 0 && ev) {
-      const r = cv.getBoundingClientRect();
-      spawn((ev.clientX || 0) - r.left, (ev.clientY || 0) - r.top, 6, 120, ['#ffd08a', '#ff9a4a'], 0.5, 2);
-    }
-    if (S.phase !== 'fight') endFight(S.last);
-  }
   function endFight(res) {
     if (!res) return;
     playEnd(res); showReport(); updateShops(); updateHud(); save();
@@ -476,11 +479,8 @@
   }
 
   $('btnStart').addEventListener('click', doStart);
-  $('btnMine').addEventListener('click', (e) => doClick(e));
-  cv.addEventListener('mousedown', (e) => { if (S.phase === 'fight') doClick(e); });
   window.addEventListener('keydown', (e) => {
-    if (e.code === 'Space') { e.preventDefault(); if (S.phase === 'fight') doClick(null); }
-    else if (e.code === 'Enter' && S.phase === 'shop') { e.preventDefault(); doStart(); }
+    if (e.code === 'Enter' && S.phase === 'shop') { e.preventDefault(); doStart(); }
   });
   document.querySelectorAll('[data-speed]').forEach((b) => b.addEventListener('click', () => {
     speed = +b.dataset.speed;

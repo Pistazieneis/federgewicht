@@ -13,7 +13,7 @@ function shopGreedy(s) {
       if (!best || score < best.score) best = { score, cost, label };
     };
     C.BOTS.forEach((b, i) => consider(C.botCost(s, i), () => s.bots[i]++, () => s.bots[i]--, 'bot' + i));
-    C.UPGRADES.forEach((u) => { if (!s.upgrades[u.id] && u.req(s) && !u.fx.click && !u.fx.clickRate)
+    C.UPGRADES.forEach((u) => { if (!s.upgrades[u.id] && u.req(s))
       consider(u.cost, () => (s.upgrades[u.id] = true), () => delete s.upgrades[u.id], u.fx.time ? 't' + u.id : u.id); });
     if (!best || best.score === Infinity) break;
     if (best.label.startsWith('bot')) C.buyBot(s, +best.label.slice(3)); else C.buyUpgrade(s, best.label.replace(/^t/, ''));

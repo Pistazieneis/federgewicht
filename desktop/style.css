@@ -77,15 +77,6 @@ main { flex: 1; display: flex; min-height: 0; }
 .bar { height: 6px; background: #1b222d; border-radius: 3px; overflow: hidden; margin: 6px 0 8px; }
 .bar i { display: block; height: 100%; width: 100%; background: var(--dm); transition: width .15s linear; }
 .bar.time i { background: var(--ok); }
-.mine {
-  position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%);
-  background: rgba(12, 15, 21, .85); border: 1px solid #3b4658; border-radius: 6px; padding: 12px 34px;
-  font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
-}
-.mine small { display: block; font: 400 11px var(--mono); color: var(--muted); text-transform: none; letter-spacing: 0; }
-.mine:hover { border-color: var(--dm); }
-.mine:active { transform: translateX(-50%) scale(.98); }
-
 /* Upgrade-Fenster */
 .report { position: absolute; left: 16px; top: 16px; width: 330px; }
 .rep-head { font-weight: 700; letter-spacing: .05em; margin-bottom: 8px; }

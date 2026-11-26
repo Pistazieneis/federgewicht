@@ -24,7 +24,6 @@
     prestigeUnlockAfter: 5,  // Prestige ab dem 5. abgehandelten Meteoriten
     prestigeBase: 1e9,       // FP = floor(sqrt(gesamtΔM / prestigeBase))
     fpBonusPerPoint: 0.10,   // jeder verdiente FP gibt +10 % Abbau (dauerhaft)
-    clickBase: 1,            // manueller Abbau pro Klick in kg
     saveKey: 'federgewicht.save.v2'
   };
 
@@ -68,8 +67,6 @@
        { all: 2 }      alle Bots x2
        { bot: i, m: 2} nur Bot-Typ i x2
        { time: 10 }    +10 s bis zum Einschlag
-       { click: 3 }    +3 kg pro Klick
-       { clickRate: .02 } Klick liefert zusätzlich 2 % der Abbaurate pro Sekunde
      req(s) entscheidet, ob das Upgrade überhaupt angezeigt wird.            */
   const UPGRADES = [];
   const up = (u) => UPGRADES.push(u);
@@ -105,15 +102,6 @@
     id, name, desc: `Entdeckt Objekte früher: +${t} s bis zum Einschlag.`, cost, fx: { time: t },
     req: (s) => k === 0 || !!s.upgrades[arr[k - 1][0]]
   }));
-
-  // Manueller Abbau
-  up({ id: 'c1', name: 'Handbohrer',        desc: '+3 kg pro Klick.',   cost: 40,   fx: { click: 3 },   req: () => true });
-  up({ id: 'c2', name: 'Sprengbohrer',      desc: '+30 kg pro Klick.',  cost: 3e3,  fx: { click: 30 },  req: (s) => !!s.upgrades.c1 });
-  up({ id: 'c3', name: 'Hydraulikmeißel',   desc: '+300 kg pro Klick.', cost: 2e5,  fx: { click: 300 }, req: (s) => !!s.upgrades.c2 });
-  up({ id: 'c4', name: 'Fernsteuerung',     desc: 'Jeder Klick liefert zusätzlich 2 % der Abbaurate pro Sekunde.',
-       cost: 1e5, fx: { clickRate: 0.02 }, req: (s) => !!s.upgrades.c1 });
-  up({ id: 'c5', name: 'Direktkopplung',    desc: 'Jeder Klick liefert zusätzlich 10 % der Abbaurate pro Sekunde.',
-       cost: 5e6, fx: { clickRate: 0.10 }, req: (s) => !!s.upgrades.c4 });
 
   /* ---------------------------------------------- Spezial-Upgrades (Iridium)
      Mehrstufig (max). Cost = Liste der Preise je Stufe. Bleiben nach Prestige. */
@@ -231,11 +219,6 @@
     const t = s.meteor ? s.meteor.elapsed : 0;
     return baseRate(s) * (1 + 0.005 * (s.special.resonance || 0) * t);
   }
-  function clickPower(s) {
-    let flat = CFG.clickBase, pct = 0;
-    ups(s).forEach((u) => { flat += u.fx.click || 0; pct += u.fx.clickRate || 0; });
-    return flat * prestigeMult(s) + pct * currentRate(s);
-  }
   function timeLimit(s) {
     let t = CFG.baseTime + 5 * lvl(s, 'time');
     ups(s).forEach((u) => { t += u.fx.time || 0; });
@@ -258,15 +241,6 @@
     s.meteor.remaining -= s.meteor.mass * blast;
     s.phase = 'fight';
     return true;
-  }
-
-  /** Ein Klick = manueller Abbau. */
-  function click(s) {
-    if (s.phase !== 'fight') return 0;
-    const p = Math.min(clickPower(s), s.meteor.remaining);
-    s.meteor.remaining -= p;
-    checkEnd(s);
-    return p;
   }
 
   /** Simulationsschritt (dt in Sekunden). Gibt ggf. ein Ergebnis-Objekt zurück. */
@@ -372,8 +346,8 @@
 
   root.Core = {
     CFG, CLASSES, levelInfo, BOTS, UPGRADES, SPECIAL, FP_SHOP,
-    newState, startMeteor, click, tick, buyBot, buyUpgrade, buySpecial, buyFp, prestige,
-    botCost, baseRate, currentRate, clickPower, timeLimit, prestigeUnlocked, prestigeGain, prestigeMult,
+    newState, startMeteor, tick, buyBot, buyUpgrade, buySpecial, buyFp, prestige,
+    botCost, baseRate, currentRate, timeLimit, prestigeUnlocked, prestigeGain, prestigeMult,
     reserveAmount, makeMeteor, serialize, deserialize, fmtMass, fmtNum, fmtTime
   };
   if (typeof module !== 'undefined') module.exports = root.Core;   // für Node-Tests

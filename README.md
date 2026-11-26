@@ -5,7 +5,7 @@ Baue Bots und Upgrades, die ihn abbauen, bevor er einschlägt.
 
 ## Spielprinzip
 1. Du startest mit **5 kg ΔM** (ΔM = zerstörte Masse, die Hauptwährung) und kaufst deinen ersten Bot.
-2. Der Meteorit fliegt an. Bots bauen ihn ab, du kannst zusätzlich manuell abbauen (Klick / Leertaste).
+2. Der Meteorit fliegt an. Deine Bots bauen ihn automatisch ab, du siehst ihn näher kommen und schrumpfen.
 3. Ob zerstört oder eingeschlagen: Die abgebaute Masse wird zu ΔM. Im **Upgrade-Fenster** kaufst du neue Bots und Upgrades.
 4. Nur **vollständig zerstörte** Objekte hinterlassen **Iridium** (Spezialwährung für Spezialausrüstung).
    Jeder zerstörte Meteorit bringt die nächste, schwerere Stufe. Schlägt einer ein, geht es wieder bei
@@ -15,7 +15,7 @@ Baue Bots und Upgrades, die ihn abbauen, bevor er einschlägt.
 6. **Prestige** (ab dem 5. Meteoriten): Forschungspunkte hängen vom insgesamt gewonnenen ΔM ab,
    geben einen dauerhaften Abbaubonus und schalten Forschungs-Upgrades frei.
 
-Bedienung: `Enter` = Abbau starten, `Leertaste` = manuell abbauen, `Shift+Klick` im Shop = bis zu 10 Käufe.
+Bedienung: `Enter` = Abbau starten, `Shift+Klick` im Shop = bis zu 10 Käufe. Gekämpft wird komplett automatisch.
 
 ## Spielen
 Im Browser: `desktop/index.html` öffnen. Oder fertige Version unter **Releases** laden
