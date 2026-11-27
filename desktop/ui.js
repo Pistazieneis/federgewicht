@@ -212,13 +212,10 @@
   function withBots(s, i, extra) { const c = Object.assign({}, s, { bots: s.bots.slice() }); c.bots[i] += extra; return c; }
 
   /* ----------------------------------------------------------- 3. HUD */
-  // Kleine Sprüche, damit der Weltuntergang sympathisch bleibt
   const pick = (a) => a[(Math.random() * a.length) | 0];
-  const KILL_QUIPS = ['Sicher entsorgt.', 'Das war knapp.', 'Die Versicherung atmet auf.', 'Schon wieder Glück gehabt.', 'Sauber weggeräumt.', 'Der Nachbar wird nichts merken.', 'Fachgerecht zerlegt.'];
-  const BOOM_QUIPS = ['Hoppla. Die Erde ist weg.', 'Das gibt Ärger mit der Hausverwaltung.', 'Nicht schlimm, wir haben ja noch eine.', 'Die Erde hat es kommen sehen.', 'Tschüss, Erde. Danke für den Fisch.', 'Kann ja mal passieren.', 'Das Meeting fällt dann wohl aus.'];
 
-  /** Anzeigename eines Objekts, z. B. "🚲 Fahrrad" (ernste Objekte haben kein Emoji). */
-  const label = (o) => (o.emoji ? o.emoji + ' ' : '') + o.name;
+  /** Anzeigename eines Objekts, z. B. "Fahrrad". */
+  const label = (o) => o.name;
 
   function forecast(rateNow, m) {
     // Grobe Prognose: Wie viel der Masse schafft man in der Restzeit?
@@ -285,9 +282,9 @@
     if (!r) return;
     const head = $('repHead');
     head.className = 'rep-head bad';
-    head.textContent = S.impacts > 1 ? 'Die Erde ist explodiert (schon wieder).' : 'Die Erde ist explodiert.';
+    head.textContent = 'Die Erde wurde zerstört.';
     const rows = [
-      ['Schuld war', label(r)],
+      ['Aufschlag', label(r)],
       ['Zerstört im Lauf', `${r.run.kills} ${r.run.kills === 1 ? 'Objekt' : 'Objekte'}`],
       ['ΔM im Lauf', '+' + C.fmtMass(r.run.gain)]
     ];
@@ -299,7 +296,7 @@
   /** Meldung "Objekt zerstört" unten links. */
   function addFeed(res) {
     const f = $('feed'), d = document.createElement('div');
-    d.innerHTML = `${label(res)} zerstört <b>+${C.fmtMass(res.gain)}</b>${res.iridium ? ' · +' + res.iridium + ' Iridium' : ''}<small>${pick(KILL_QUIPS)}</small>`;
+    d.innerHTML = `${label(res)} zerstört <b>+${C.fmtMass(res.gain)}</b>${res.iridium ? ' · +' + res.iridium + ' Iridium' : ''}`;
     f.appendChild(d);
     while (f.children.length > 4) f.firstChild.remove();
     setTimeout(() => d.remove(), 5200);
@@ -348,7 +345,6 @@
   let earthT = 1;        // 0..1: Erde (neu) erscheinen lassen
   let lastPos = { x: 0, y: 0, r: 20 };
   let lastSite = { lon: 0, tilt: 0.4 };   // Einschlagsregion des aktuellen Objekts (für die Explosion)
-  const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
 
   function spawn(x, y, n, speedMax, colors, life, size) {
     for (let i = 0; i < n; i++) {
@@ -585,18 +581,27 @@
     ctx.restore(); ctx.restore();
   }
 
-  /** Alltagsobjekt als Emoji. Es taumelt (dreht sich) und wippt leicht, das sieht charmant aus. */
-  function drawEmoji(emoji, r, spin, heat) {
-    ctx.save();
-    if (heat > 0) {                                 // glühende Hülle bei Annäherung an die Erde
-      const hg = ctx.createRadialGradient(0, 0, r * 0.2, 0, 0, r * 1.5);
-      hg.addColorStop(0, `rgba(255,190,90,${0.55 * heat})`); hg.addColorStop(1, 'rgba(255,90,20,0)');
+  /** Alltagsobjekt als Illustration (siehe art.js). Zeichnet das Bild gedreht und legt dann das Sonnenlicht darüber:
+      Es kommt immer von links, unabhängig von der Drehung des Objekts; auf der Seite zur Erde glüht es bei Annäherung. */
+  const litCanvas = document.createElement('canvas'), litCtx = litCanvas.getContext('2d');
+  function drawSprite(name, r, spin, heat) {
+    const art = Art.get(name); if (!art) return false;
+    if (heat > 0) {                                  // Hüllen-Glühen (Reibungshitze)
+      const hg = ctx.createRadialGradient(0, 0, r * 0.3, 0, 0, r * 1.5);
+      hg.addColorStop(0, `rgba(255,170,80,${0.4 * heat})`); hg.addColorStop(1, 'rgba(255,90,20,0)');
       ctx.fillStyle = hg; ctx.beginPath(); ctx.arc(0, 0, r * 1.5, 0, 6.2832); ctx.fill();
     }
-    ctx.rotate(spin);
-    ctx.font = `${Math.round(r * 2)}px ${EMOJI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(emoji, 0, r * 0.06);
-    ctx.restore();
+    const size = Math.max(16, Math.round(r * 2.3 * DPR));
+    if (litCanvas.width !== size) { litCanvas.width = litCanvas.height = size; }
+    const g = litCtx; g.globalCompositeOperation = 'source-over'; g.clearRect(0, 0, size, size);
+    g.save(); g.translate(size / 2, size / 2); g.rotate(spin); g.drawImage(art, -size / 2, -size / 2, size, size); g.restore();
+    g.globalCompositeOperation = 'source-atop';       // nur dort zeichnen, wo das Objekt ist
+    const lg = g.createLinearGradient(0, size * 0.3, size, size * 0.7);
+    lg.addColorStop(0, 'rgba(255,238,210,.16)'); lg.addColorStop(0.45, 'rgba(0,0,0,0)'); lg.addColorStop(1, 'rgba(0,0,14,.6)');
+    g.fillStyle = lg; g.fillRect(0, 0, size, size);
+    if (heat > 0) { const hg = g.createRadialGradient(size / 2, size * 1.05, 0, size / 2, size * 1.05, size * 0.7); hg.addColorStop(0, `rgba(255,150,60,${0.55 * heat})`); hg.addColorStop(1, 'rgba(255,90,20,0)'); g.fillStyle = hg; g.fillRect(0, 0, size, size); }
+    ctx.drawImage(litCanvas, -r * 1.15, -r * 1.15, r * 2.3, r * 2.3);
+    return true;
   }
 
   /* ---- Das Fahrrad wird selbst gezeichnet (statt Emoji): gut sichtbar und mit echter Klingel.
@@ -616,7 +621,9 @@
     const line = (x1, y1, x2, y2, w, c) => { ctx.strokeStyle = c; ctx.lineWidth = w * S_; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x1 * S_, y1 * S_); ctx.lineTo(x2 * S_, y2 * S_); ctx.stroke(); };
     const wheel = (cx, cy) => {
       const wr = 0.38 * S_, sp = clock * 11;
-      ctx.strokeStyle = '#eef1f5'; ctx.lineWidth = wr * 0.16; ctx.beginPath(); ctx.arc(cx * S_, cy * S_, wr, 0, 6.2832); ctx.stroke();   // heller Reifen
+      ctx.strokeStyle = '#15171a'; ctx.lineWidth = wr * 0.2; ctx.beginPath(); ctx.arc(cx * S_, cy * S_, wr, 0, 6.2832); ctx.stroke();           // schwarzer Reifen
+      ctx.strokeStyle = '#b8bec6'; ctx.lineWidth = wr * 0.06; ctx.beginPath(); ctx.arc(cx * S_, cy * S_, wr * 0.88, 0, 6.2832); ctx.stroke();     // silberne Felge
+      ctx.strokeStyle = 'rgba(255,255,255,.28)'; ctx.lineWidth = Math.max(1, wr * 0.025); ctx.beginPath(); ctx.arc(cx * S_, cy * S_, wr * 1.09, 3.4, 5.4); ctx.stroke();   // Lichtkante, damit der Reifen vor dem Weltraum sichtbar bleibt
       ctx.strokeStyle = 'rgba(190,200,214,.9)'; ctx.lineWidth = Math.max(1, wr * 0.025);
       for (let k = 0; k < 8; k++) { const a = sp + k * 0.7854; ctx.beginPath(); ctx.moveTo(cx * S_, cy * S_); ctx.lineTo(cx * S_ + Math.cos(a) * wr, cy * S_ + Math.sin(a) * wr); ctx.stroke(); }  // drehende Speichen
       ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = wr * 0.06;                                                                   // Drehunschärfe: Bögen auf dem Reifen
@@ -624,22 +631,22 @@
       ctx.fillStyle = '#c8d0db'; ctx.beginPath(); ctx.arc(cx * S_, cy * S_, wr * 0.1, 0, 6.2832); ctx.fill();
     };
     wheel(-0.62, 0.35); wheel(0.62, 0.35);
-    const FR = '#ff5a36';                 // leuchtendes Rot-Orange für den Rahmen
+    const FR = '#d9422f';                 // kräftiges Rot für den Rahmen (gut sichtbar vor dem dunklen Weltraum)
     line(-0.62, 0.35, -0.22, -0.18, 0.07, FR); line(-0.22, -0.18, -0.08, 0.38, 0.07, FR);        // Hinterbau, Sitzrohr
     line(-0.62, 0.35, -0.08, 0.38, 0.06, FR); line(-0.22, -0.18, 0.38, -0.12, 0.07, FR);         // Kettenstrebe, Oberrohr
-    line(-0.08, 0.38, 0.38, -0.12, 0.08, FR); line(0.38, -0.12, 0.62, 0.35, 0.06, '#ffb02e');    // Unterrohr, Gabel
-    line(0.38, -0.12, 0.38, -0.34, 0.06, '#ffb02e'); line(0.30, -0.34, 0.54, -0.30, 0.06, '#ffb02e');   // Lenkerstange, Lenker
-    line(-0.34, -0.22, -0.12, -0.22, 0.09, '#ffd23f');                                            // Sattel (gelb)
+    line(-0.08, 0.38, 0.38, -0.12, 0.08, FR); line(0.38, -0.12, 0.62, 0.35, 0.06, '#6b727c');    // Unterrohr, Gabel
+    line(0.38, -0.12, 0.38, -0.34, 0.06, '#6b727c'); line(0.30, -0.34, 0.54, -0.30, 0.06, '#15171a');   // Lenkerstange, Lenker (Griffe schwarz)
+    line(-0.34, -0.22, -0.12, -0.22, 0.09, '#141518');                                            // Sattel (schwarz)
     line(-0.08, 0.38, -0.02, 0.52, 0.04, '#cfd6e0'); line(-0.08, 0.38, -0.14, 0.24, 0.04, '#cfd6e0');   // Pedale
     // Klingel: goldene Halbkugel mit Glanz; wackelt und sendet Schallbögen, wenn gerade geklingelt wird
     const bx = 0.40 * S_, by = -0.40 * S_, br = 0.085 * S_, wob = Math.sin(clock * 60) * 0.12 * bellPulse;
     ctx.save(); ctx.translate(bx, by); ctx.rotate(wob);
-    ctx.fillStyle = '#ffcf3a'; ctx.beginPath(); ctx.arc(0, 0, br, Math.PI, 0); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#b58a10'; ctx.fillRect(-br, 0, br * 2, br * 0.22);
+    ctx.fillStyle = '#c4cad2'; ctx.beginPath(); ctx.arc(0, 0, br, Math.PI, 0); ctx.closePath(); ctx.fill();   // verchromte Klingel
+    ctx.fillStyle = '#5f656d'; ctx.fillRect(-br, 0, br * 2, br * 0.22);
     ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.beginPath(); ctx.arc(-br * 0.35, -br * 0.45, br * 0.22, 0, 6.2832); ctx.fill();
     ctx.restore();
     if (bellPulse > 0.02) {               // Schallbögen ("ding") links und rechts der Klingel
-      ctx.strokeStyle = `rgba(255,236,150,${bellPulse})`; ctx.lineWidth = Math.max(1.5, S_ * 0.018);
+      ctx.strokeStyle = `rgba(235,240,250,${bellPulse * 0.8})`; ctx.lineWidth = Math.max(1.5, S_ * 0.018);
       for (let k = 1; k <= 3; k++) { const rr = br * (1.4 + k * 0.7 + (1 - bellPulse) * 1.4);
         ctx.beginPath(); ctx.arc(bx, by, rr, -2.3, -0.85); ctx.stroke(); }
     }
@@ -737,69 +744,69 @@
     });
   }
 
-  /* ---- Erdexplosion: bewusst maßlos übertrieben ---- */
+  /* ---- Zerstörung der Erde: Feuerball aus vielen Gasblasen, Rauch, glühende Trümmer, Druckwellen ---- */
   function startBoom(res) {
     const e = earth(), P = { x: e.x, y: e.y - e.r };           // Einschlagpunkt: Oberseite der Erde
     const chunks = [];
-    for (let i = 0; i < 110; i++) {
-      // Bruchstück aus einem zufälligen Punkt der Erdkugel; innen glüht es wie Magma
+    for (let i = 0; i < 90; i++) {
+      // Bruchstück aus einem zufälligen Punkt der Erdkugel. Je tiefer es lag, desto heißer und heller.
       const a = Math.random() * 6.2832, d = Math.sqrt(Math.random()) * e.r;
       const x = e.x + Math.cos(a) * d, y = e.y + Math.sin(a) * d, k = d / e.r;
-      const color = k > 0.82 ? (Math.random() < 0.5 ? '#2f6aa8' : '#5d7a48') : k > 0.5 ? '#8a5a38' : k > 0.25 ? '#e0571c' : '#ffd24a';
+      const color = k > 0.82 ? (Math.random() < 0.5 ? '#2a4f74' : '#4b5f3e') : k > 0.5 ? '#6a4a36' : k > 0.25 ? '#b8501c' : '#f0b45a';
       const dir = Math.atan2(y - P.y, x - P.x) * 0.5 + Math.atan2(y - e.y, x - e.x) * 0.5;   // weg vom Einschlag und vom Zentrum
-      const sp = (200 + Math.random() * 900) * (e.r / 200);
-      const size = e.r * (0.05 + Math.random() * 0.13), n = 5 + (Math.random() * 3 | 0);
-      chunks.push({ x, y, vx: Math.cos(dir) * sp, vy: Math.sin(dir) * sp - 150, rot: Math.random() * 6, vr: (Math.random() - 0.5) * 12,
-                    color, poly: Array.from({ length: n }, (_, j) => { const aa = j / n * 6.2832, rr = size * (0.6 + Math.random() * 0.6); return [Math.cos(aa) * rr, Math.sin(aa) * rr]; }) });
+      const sp = (160 + Math.random() * 800) * (e.r / 200);
+      const size = e.r * (0.04 + Math.random() * 0.12), n = 5 + (Math.random() * 3 | 0);
+      chunks.push({ x, y, vx: Math.cos(dir) * sp, vy: Math.sin(dir) * sp - 120, rot: Math.random() * 6, vr: (Math.random() - 0.5) * 8,
+                    color, hot: k < 0.5, poly: Array.from({ length: n }, (_, j) => { const aa = j / n * 6.2832, rr = size * (0.6 + Math.random() * 0.6); return [Math.cos(aa) * rr, Math.sin(aa) * rr]; }) });
     }
-    boom = { t: 0, e, P, chunks, bursts: [], nextBurst: 0, quip: pick(BOOM_QUIPS), what: label(res), where: regionName(lastSite) };
-    spawn(P.x, P.y, 700, 1100, ['#fff3c4', '#ffb02e', '#ff6a1a', '#7a2a10', '#d9d2c4'], 3.4, 4);
-    [[0, 1.4, '255,230,170'], [0.12, 1.8, '255,140,60'], [0.3, 2.3, '255,255,255'], [0.55, 2.8, '255,90,40']].forEach(([delay, s, col], i) =>
-      setTimeout(() => rings.push({ x: P.x, y: P.y, r: Math.max(W, H) * s * 0.55, life: 1.8 + i * 0.3, col, sq: 0.8 }), delay * 1000));
-    flash = 1.5; shake = 80;
+    // Gasblasen des Feuerballs (Feuer oder Rauch), jede mit eigenem Start und eigener Lebensdauer
+    const blobs = Array.from({ length: 70 }, () => ({ a: Math.random() * 6.2832, d: Math.sqrt(Math.random()), s: 0.25 + Math.random() * 0.5, delay: Math.random() * 0.5, life: 2.4 + Math.random() * 1.8, smoke: Math.random() < 0.45 }));
+    boom = { t: 0, e, P, chunks, blobs, what: label(res), where: regionName(lastSite) };
+    spawn(P.x, P.y, 450, 900, ['#ffe2a8', '#ffb050', '#ff7a2a', '#a8431a', '#cbbfae'], 3.0, 3);
+    [[0, 1.2, '255,236,205', 2.2], [0.25, 0.8, '255,170,100', 2.8]].forEach(([delay, s, col, life]) =>
+      setTimeout(() => rings.push({ x: P.x, y: P.y, r: Math.max(W, H) * s, life, col, sq: 0.8 }), delay * 1000));
+    flash = 1.1; shake = 45;
   }
 
   function drawBoom(dt) {
     const b = boom; b.t += dt; const e = b.e;
-    // Feuerball
-    if (b.t < 2.6) {
-      const k = b.t / 2.6, rad = e.r * (0.5 + 2.2 * (1 - Math.exp(-b.t * 2.2)));
-      const g = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, rad);
-      g.addColorStop(0, `rgba(255,255,235,${1 - k})`); g.addColorStop(0.3, `rgba(255,214,90,${0.9 * (1 - k)})`);
-      g.addColorStop(0.65, `rgba(255,110,30,${0.7 * (1 - k)})`); g.addColorStop(1, 'rgba(120,20,0,0)');
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(e.x, e.y, rad, 0, 6.2832); ctx.fill();
-    }
-    // Erdbrocken fliegen davon
+    // Gleißender Kern im ersten Moment
+    if (b.t < 0.5) { const k = b.t / 0.5, rad = e.r * (0.4 + 1.4 * k); const g = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, rad);
+      g.addColorStop(0, `rgba(255,250,235,${1 - k})`); g.addColorStop(1, 'rgba(255,200,120,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(e.x, e.y, rad, 0, 6.2832); ctx.fill(); }
+    // Feuer- und Rauchblasen: Feuer wird mit der Zeit rötlicher und verlischt, Rauch bleibt länger und wird dunkler
+    b.blobs.forEach((o) => {
+      const age = b.t - o.delay; if (age < 0 || age > o.life) return;
+      const k = age / o.life, grow = 1 - Math.exp(-age * 1.6), dist = o.d * e.r * (0.3 + 1.5 * grow);
+      const x = e.x + Math.cos(o.a) * dist, y = e.y + Math.sin(o.a) * dist, rr = e.r * o.s * (0.35 + 1.1 * grow);
+      const g = ctx.createRadialGradient(x, y, 0, x, y, rr);
+      if (!o.smoke) {
+        const a = Math.max(0, 1 - k * 1.5) * 0.5;
+        g.addColorStop(0, `rgba(255,${230 - k * 120 | 0},${170 - k * 150 | 0},${a})`); g.addColorStop(0.5, `rgba(255,${130 - k * 90 | 0},40,${a * 0.6})`); g.addColorStop(1, 'rgba(120,30,0,0)');
+        ctx.globalCompositeOperation = 'lighter';
+      } else {
+        const a = Math.min(1, age / 0.6) * (1 - k) * 0.4;
+        g.addColorStop(0, `rgba(78,62,54,${a})`); g.addColorStop(1, 'rgba(30,24,22,0)');
+      }
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, rr, 0, 6.2832); ctx.fill(); ctx.globalCompositeOperation = 'source-over';
+    });
+    // Erdbrocken fliegen davon; heiße ziehen einen glühenden Schweif
     b.chunks.forEach((c) => {
       c.x += c.vx * dt; c.y += c.vy * dt; c.vx *= Math.exp(-0.45 * dt); c.vy *= Math.exp(-0.45 * dt); c.rot += c.vr * dt;
-      ctx.save(); ctx.globalAlpha = Math.max(0, Math.min(1, (4.6 - b.t) / 1.4)); ctx.translate(c.x, c.y); ctx.rotate(c.rot);
+      const fade = Math.max(0, Math.min(1, (4.6 - b.t) / 1.4));
+      if (c.hot) { ctx.strokeStyle = `rgba(255,150,70,${0.5 * fade})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(c.x - c.vx * 0.09, c.y - c.vy * 0.09); ctx.stroke(); }
+      ctx.save(); ctx.globalAlpha = fade; ctx.translate(c.x, c.y); ctx.rotate(c.rot);
       ctx.beginPath(); c.poly.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); ctx.closePath();
-      ctx.fillStyle = c.color; ctx.fill(); ctx.strokeStyle = 'rgba(255,230,180,.35)'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = c.color; ctx.fill(); ctx.strokeStyle = c.hot ? 'rgba(255,190,110,.6)' : 'rgba(0,0,0,.35)'; ctx.lineWidth = 1; ctx.stroke();
       ctx.restore();
     });
-    // 💥-Emojis ploppen überall auf
-    if (b.t < 1.8 && b.t >= b.nextBurst) {
-      b.nextBurst = b.t + 0.07;
-      b.bursts.push({ x: e.x + (Math.random() - 0.5) * W * 0.9, y: e.y - Math.random() * H * 0.75, s: 50 + Math.random() * 130, t0: b.t, rot: (Math.random() - 0.5) * 0.8 });
-    }
-    b.bursts.forEach((q) => {
-      const k = (b.t - q.t0) / 0.8; if (k > 1) return;
-      ctx.save(); ctx.globalAlpha = 1 - k; ctx.translate(q.x, q.y); ctx.rotate(q.rot); ctx.font = `${Math.round(q.s * (0.5 + k))}px ${EMOJI_FONT}`;
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('💥', 0, 0); ctx.restore();
-    });
-    // Riesiges "BUMM!" und der Spruch dazu
-    if (b.t < 4.4) {
-      const a = Math.max(0, Math.min(1, (4.4 - b.t) / 0.8)), pop = 1 + Math.max(0, 0.6 - b.t) * 2.5;
-      ctx.save(); ctx.globalAlpha = a; ctx.translate(W / 2, H * 0.34); ctx.rotate(-0.06 + Math.sin(b.t * 30) * 0.01 * Math.max(0, 1 - b.t)); ctx.scale(pop, pop);
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.font = `900 ${Math.round(Math.min(H * 0.2, W * 0.2))}px Impact, "Arial Black", sans-serif`;
-      ctx.lineWidth = 12; ctx.strokeStyle = '#2a0d02'; ctx.lineJoin = 'round'; ctx.strokeText('BUMM!', 0, 0);
-      ctx.fillStyle = '#ffb02e'; ctx.fillText('BUMM!', 0, 0);
-      ctx.font = `600 ${Math.round(Math.max(15, H * 0.032))}px -apple-system, "Segoe UI", sans-serif`;
-      ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(0,0,0,.85)';
-      const l1 = `${b.what} trifft ${b.where}.`;
-      ctx.strokeText(l1, 0, H * 0.13); ctx.fillStyle = '#fff'; ctx.fillText(l1, 0, H * 0.13);
-      ctx.strokeText(b.quip, 0, H * 0.18); ctx.fillStyle = '#ffd9a0'; ctx.fillText(b.quip, 0, H * 0.18);
+    // Sachliche Einblendung unten: Art, Objekt und Ort des Aufschlags
+    if (b.t > 0.9 && b.t < 4.6) {
+      const a = Math.min(1, (b.t - 0.9) / 0.6) * Math.min(1, (4.6 - b.t) / 0.6);
+      ctx.save(); ctx.globalAlpha = a; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+      ctx.fillStyle = 'rgba(220,226,236,.75)'; ctx.font = `600 ${Math.round(Math.max(11, H * 0.016))}px -apple-system, "Segoe UI", sans-serif`;
+      ctx.fillText('A U F S C H L A G', W / 2, H * 0.9);
+      ctx.fillStyle = '#f2f4f8'; ctx.font = `300 ${Math.round(Math.max(18, H * 0.036))}px -apple-system, "Segoe UI", sans-serif`;
+      ctx.fillText(`${b.what}  ·  ${b.where}`, W / 2, H * 0.9 + Math.max(24, H * 0.045));
       ctx.restore();
     }
     if (b.t > 4.6) { boom = null; earthT = 0; Sfx.play('reborn'); updateHud(); }
@@ -835,7 +842,7 @@
         const spin = clock * (0.9 + (m.n % 4) * 0.35) * (m.n % 2 ? 1 : -1) + m.n;
         drawTrail(r, Math.PI / 2, heat);                                      // Feuerschweif nach oben (es fällt nach unten)
         let targets = null;
-        if (m.funny) drawSpeedMarks(r, 0.6 + heat * 0.8);                     // Bewegungszeichen bei allen Alltagsobjekten
+        if (m.funny) drawSpeedMarks(r, 0.35 + heat * 0.5);                    // Bewegungszeichen (dezent) bei allen Alltagsobjekten
         if (m.name === 'Fahrrad') {
           // Eigene Zeichnung: dreht sich langsamer, damit man die Klingel sieht; Zielpunkte mitdrehen
           const sp = clock * 0.7, c = Math.cos(sp), s_ = Math.sin(sp);
@@ -843,7 +850,7 @@
           if (heat > 0) { const hg = ctx.createRadialGradient(0, 0, r * 0.2, 0, 0, r * 1.5); hg.addColorStop(0, `rgba(255,190,90,${0.5 * heat})`); hg.addColorStop(1, 'rgba(255,90,20,0)'); ctx.fillStyle = hg; ctx.beginPath(); ctx.arc(0, 0, r * 1.5, 0, 6.2832); ctx.fill(); }
           drawBike(r); ctx.restore();
           targets = BIKE_PARTS.map((q) => ({ x: (q.x * c - q.y * s_) * r, y: (q.x * s_ + q.y * c) * r, bell: q.bell }));
-        } else if (m.funny) drawEmoji(m.emoji, r, spin, heat);
+        } else if (m.funny && drawSprite(m.name, r, spin, heat)) { /* gezeichnet */ }
         else drawRock(r, m.n * 31 + 5, spin * 0.3, Math.PI / 2, heat);
         if (fight) drawBots(r, dt, targets);
         ctx.restore();
@@ -877,6 +884,10 @@
     // Blitz
     if (flash > 0.01) { ctx.fillStyle = `rgba(255,244,222,${Math.min(1, flash)})`; ctx.fillRect(-100, -100, W + 200, H + 200); flash *= Math.pow(0.02, dt); }
     ctx.restore();
+    // Vignette: dunkelt die Bildränder ab (wie bei einem Kameraobjektiv) und lenkt den Blick zur Mitte
+    const vg = ctx.createRadialGradient(W / 2, H * 0.48, Math.min(W, H) * 0.35, W / 2, H * 0.48, Math.max(W, H) * 0.85);
+    vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,6,.55)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
   }
 
   /** Effekte, wenn ein Objekt zerstört wurde (der Lauf geht gleich mit dem nächsten weiter). */

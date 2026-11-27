@@ -46,6 +46,7 @@ mit Version eintragen. Der Workflow baut die Windows-Version und die Browser-Dat
 | `desktop/core.js` | Spielregeln und Balance (ohne Oberfläche) |
 | `desktop/ui.js` | Oberfläche, Shops, Canvas-Szene, Explosion |
 | `desktop/sfx.js` | Sound (Web Audio, ohne Audiodateien) |
+| `desktop/art.js` | Gezeichnete Illustrationen der Alltagsobjekte |
 | `desktop/index.html`, `style.css` | Layout und Optik |
 | `desktop/main.js` | Electron-Fenster |
 | `tools/sim.js` | Balance-Simulation: `node tools/sim.js 40` |

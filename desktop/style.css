@@ -153,3 +153,9 @@ main { flex: 1; display: flex; min-height: 0; }
 
 /* Kaufmenge-Umschalter über den Shop-Listen */
 .modebar { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--panel); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
+
+/* Nüchterner Instrumenten-Look: kleinere Radien, beschriftete Werte in Kapitälchen-Optik */
+.card, .item, .forecast, .pres-box, .modebar, #toast, #feed div { border-radius: 3px; }
+.row .muted, .grid2 .muted, .rep-body .muted { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+#feed div { border-left-color: #6a7a90; }
+.rep-head.bad { color: #d98a7f; }

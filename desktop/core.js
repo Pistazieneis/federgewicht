@@ -29,18 +29,18 @@
 
   /* ---------------------------------------------------------- Objektklassen
      Die Objekte fallen nacheinander auf die Erde (Stufe 1, 2, 3 ...), aufsteigend nach Masse.
-     Zuerst kommen lustige Alltagsgegenstände (explizite Liste mit Emoji), danach ernste
+     Zuerst kommen lustige Alltagsgegenstände (explizite Liste mit Name und Masse; gezeichnet in art.js), danach ernste
      Himmelskörper, die aus Start-Masse (mass), Wachstum pro Stufe (growth) und Anzahl (count)
      erzeugt werden. Zwischen den Klassen liegen große Massensprünge -> dort entsteht die
      "Wand", die man erst mit mehr Prestige-Bonus überwindet. Weitere Klassen (Planeten, Sterne,
      Galaxien ...) lassen sich unten anhängen. Die letzte Klasse läuft endlos weiter. */
   const CLASSES = [
     { name: 'Alltag', funny: true, items: [
-      ['Fahrrad', '🚲', 15],        ['Sofa', '🛋️', 70],           ['Motorrad', '🏍️', 220],
-      ['Klavier', '🎹', 400],       ['Pferd', '🐎', 550],          ['Kleinwagen', '🚗', 1200],
-      ['Elefant', '🐘', 5000],      ['Schulbus', '🚌', 12000],     ['Lokomotive', '🚂', 8e4],
-      ['Blauwal', '🐋', 1.5e5],     ['Jumbojet', '✈️', 4e5],       ['Eiffelturm', '🗼', 1e7],
-      ['Kreuzfahrtschiff', '🚢', 1e8], ['Empire State Building', '🏢', 3.65e8], ['Cheops-Pyramide', '🔺', 5.9e9]
+      ['Fahrrad', 15],        ['Sofa', 70],           ['Motorrad', 220],
+      ['Klavier', 400],       ['Pferd', 550],          ['Kleinwagen', 1200],
+      ['Elefant', 5000],      ['Schulbus', 12000],     ['Lokomotive', 8e4],
+      ['Blauwal', 1.5e5],     ['Jumbojet', 4e5],       ['Eiffelturm', 1e7],
+      ['Kreuzfahrtschiff', 1e8], ['Empire State Building', 3.65e8], ['Cheops-Pyramide', 5.9e9]
     ] },
     { name: 'Kleiner Asteroid', mass: 3e11,  growth: 1.5, count: 8 },
     { name: 'Asteroid',         mass: 2e14,  growth: 1.5, count: 8 },
@@ -53,8 +53,8 @@
     for (let c = 0; c < CLASSES.length; c++) {
       const k = CLASSES[c], count = k.items ? k.items.length : k.count;
       if (left < count || c === CLASSES.length - 1) {
-        if (k.items) { const it = k.items[left]; return { cls: k.name, classIndex: c, pos: left + 1, count, mass: it[2], name: it[0], emoji: it[1], funny: true }; }
-        return { cls: k.name, classIndex: c, pos: left + 1, count, mass: k.mass * Math.pow(k.growth, left), name: null, emoji: null, funny: false };
+        if (k.items) { const it = k.items[left]; return { cls: k.name, classIndex: c, pos: left + 1, count, mass: it[1], name: it[0], funny: true }; }
+        return { cls: k.name, classIndex: c, pos: left + 1, count, mass: k.mass * Math.pow(k.growth, left), name: null, funny: false };
       }
       left -= count;
     }
@@ -199,7 +199,7 @@
     const n = s.meteorN, info = levelInfo(n), mass = info.mass;
     const time = timeLimit(s);
     return { n, mass, remaining: mass, time, timeLeft: time, elapsed: 0,
-             name: info.name || designation(s.meteorsSeen + 1), emoji: info.emoji, funny: info.funny,
+             name: info.name || designation(s.meteorsSeen + 1), funny: info.funny,
              cls: info.cls, classIndex: info.classIndex, pos: info.pos, classCount: info.count };
   }
   function designation(n) { return `NEO 2026-${String(n).padStart(3, '0')}`; }
@@ -282,7 +282,7 @@
     if (dead) { s.destroyed++; s.run.kills++; drop = iridiumDrop(s, m.n); s.iridium += drop; s.run.iridium += drop; }
     else s.impacts++;
     s.meteorsSeen++;
-    const res = { destroyed: dead, n: m.n, name: m.name, emoji: m.emoji, funny: m.funny, mass: m.mass, mined: minedMass, gain,
+    const res = { destroyed: dead, n: m.n, name: m.name, funny: m.funny, mass: m.mass, mined: minedMass, gain,
                   iridium: drop, fraction: minedMass / m.mass };
     if (dead) {
       s.bestLevel = Math.max(s.bestLevel, m.n);
